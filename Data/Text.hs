@@ -228,7 +228,7 @@ import Data.Text.Internal (Text(..), empty, firstf, mul, safe, text)
 import Data.Text.Show (singleton, unpack, unpackCString#)
 import qualified Prelude as P
 import Data.Text.Unsafe (Iter(..), iter, iter_, lengthWord8, reverseIter,
-                         reverseIter_, unsafeHead, unsafeTail)
+                         reverseIter_, unsafeHead, unsafeTail, takeWord8)
 import Data.Text.Internal.Unsafe.Char (unsafeChr)
 import qualified Data.Text.Internal.Functions as F
 import qualified Data.Text.Internal.Encoding.Utf8 as U8
@@ -531,11 +531,12 @@ tail t@(Text arr off len)
 -- | /O(1)/ Returns all but the last character of a 'Text', which must
 -- be non-empty.  Subject to fusion.
 init :: Text -> Text
-init (Text arr off len) | len <= 0                   = emptyError "init"
-                        | n >= 0xDC00 && n <= 0xDFFF = text arr off (len-2)
-                        | otherwise                  = text arr off (len-1)
-    where
-      n = A.unsafeIndex arr (off+len-1)
+init t@(Text arr off len)
+    | len <= 0  = emptyError "init"
+    | otherwise = U8.reverseDecodeCharIndex
+        (\_ s -> takeWord8 (len - s) t) idx (off + len - 1)
+  where
+    idx = A.unsafeIndex arr
 {-# INLINE [1] init #-}
 
 {-# RULES
