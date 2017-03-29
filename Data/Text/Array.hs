@@ -32,6 +32,7 @@ module Data.Text.Array
     , copyM
     , copyI
     , copyToPtr
+    , copyFromPtr
 
     , empty
     , equal
@@ -75,10 +76,11 @@ import Foreign.C.Types (CInt(CInt), CSize(CSize))
 #else
 import Foreign.C.Types (CInt, CSize)
 #endif
-import GHC.Base (IO(..), ByteArray#, MutableByteArray#, Int(..), (-#),
+import GHC.Base (IO(..), RealWorld, ByteArray#, MutableByteArray#, Int(..), (-#),
                  indexWord8Array#, newByteArray#, plusAddr#,
                  unsafeFreezeByteArray#, writeWord8Array#,
-                 copyByteArray#, copyMutableByteArray#, copyByteArrayToAddr#)
+                 copyByteArray#, copyMutableByteArray#, copyByteArrayToAddr#,
+                 copyAddrToByteArray#)
 import GHC.Exts (Ptr(..))
 import GHC.ST (ST(..), runST)
 import GHC.Word (Word8(..))
@@ -256,3 +258,14 @@ copyToPtr dest@(Ptr dest#) i0@(I# i0#) src j0@(I# j0#) top@(I# top#)
         IO $ \s -> case copyByteArrayToAddr# (aBA src) j0# (plusAddr# dest# i0#) (top# -# i0#) s of
                      s' -> (# s', () #)
 {-# INLINE copyToPtr #-}
+
+copyFromPtr :: MArray RealWorld  -- ^ Destination
+            -> Int               -- ^ Destination offset
+            -> Ptr Word8         -- ^ Source
+            -> Int               -- ^ Source offset
+            -> Int               -- ^ Count
+            -> IO ()
+copyFromPtr dest i0@(I# i0#) src@(Ptr src#) j0@(I# j0#) count@(I# count#) =
+  -- TODO: bounds checking
+  IO $ \s -> case copyAddrToByteArray# (plusAddr# src# i0#) (maBA dest) j0# count# s of
+               s' -> (# s', () #)

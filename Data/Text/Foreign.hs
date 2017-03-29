@@ -83,13 +83,8 @@ fromPtr ptr (I8 len) =
 #endif
     return $! Text arr 0 len
   where
-    arr = A.run (A.new len >>= copy)
-    copy marr = loop ptr 0
-      where
-        loop !p !i | i == len = return marr
-                   | otherwise = do
-          A.unsafeWrite marr i =<< unsafeIOToST (peek p)
-          loop (p `plusPtr` 2) (i + 1)
+    arr = A.run (A.new len >>= unsafeIOToST . copy)
+    copy marr = undefined -- TODO A.copyFromPtr marr 0 ptr 0 len *> pure marr
 
 -- $lowlevel
 --
