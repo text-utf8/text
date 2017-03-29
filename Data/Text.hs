@@ -227,10 +227,11 @@ import Data.Text.Internal.Private (span_)
 import Data.Text.Internal (Text(..), empty, firstf, mul, safe, text)
 import Data.Text.Show (singleton, unpack, unpackCString#)
 import qualified Prelude as P
-import Data.Text.Unsafe (Iter(..), iter, iter_, lengthWord16, reverseIter,
+import Data.Text.Unsafe (Iter(..), iter, iter_, lengthWord8, reverseIter,
                          reverseIter_, unsafeHead, unsafeTail)
 import Data.Text.Internal.Unsafe.Char (unsafeChr)
 import qualified Data.Text.Internal.Functions as F
+import qualified Data.Text.Internal.Encoding.Utf8 as U8
 import qualified Data.Text.Internal.Encoding.Utf16 as U16
 import Data.Text.Internal.Search (indices)
 #if defined(__HADDOCK__)
@@ -499,10 +500,9 @@ second f (a, b) = (a, f b)
 last :: Text -> Char
 last (Text arr off len)
     | len <= 0                 = emptyError "last"
-    | n < 0xDC00 || n > 0xDFFF = unsafeChr n
-    | otherwise                = U16.chr2 n0 n
-    where n  = A.unsafeIndex arr (off+len-1)
-          n0 = A.unsafeIndex arr (off+len-2)
+    | otherwise = U8.reverseDecodeCharIndex (\c _ -> c) idx (off + len - 1)
+  where
+    idx = A.unsafeIndex arr
 {-# INLINE [1] last #-}
 
 {-# RULES
@@ -900,7 +900,7 @@ concat ts = case ts' of
               _ -> Text (A.run go) 0 len
   where
     ts' = L.filter (not . null) ts
-    len = sumP "concat" $ L.map lengthWord16 ts'
+    len = sumP "concat" $ L.map lengthWord8 ts'
     go :: ST s (A.MArray s)
     go = do
       arr <- A.new len

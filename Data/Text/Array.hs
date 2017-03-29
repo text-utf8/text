@@ -31,6 +31,8 @@ module Data.Text.Array
     -- * Functions
     , copyM
     , copyI
+    , copyToPtr
+
     , empty
     , equal
 #if defined(ASSERTS)
@@ -67,16 +69,17 @@ import Control.Monad.ST (unsafeIOToST)
 import Data.Bits ((.&.), xor)
 import Data.Text.Internal.Unsafe (inlinePerformIO)
 import Data.Text.Internal.Unsafe.Shift (shiftL, shiftR)
+import Foreign.Ptr (Ptr)
 #if __GLASGOW_HASKELL__ >= 703
 import Foreign.C.Types (CInt(CInt), CSize(CSize))
 #else
 import Foreign.C.Types (CInt, CSize)
 #endif
 import GHC.Base (ByteArray#, MutableByteArray#, Int(..),
-                 indexWord16Array#, newByteArray#,
-                 unsafeFreezeByteArray#, writeWord16Array#)
+                 indexWord8Array#, newByteArray#,
+                 unsafeFreezeByteArray#, writeWord8Array#)
 import GHC.ST (ST(..), runST)
-import GHC.Word (Word16(..))
+import GHC.Word (Word8(..))
 import Prelude hiding (length, read)
 
 -- | Immutable array type.
@@ -142,28 +145,28 @@ unsafeFreeze MArray{..} = ST $ \s1# ->
 -- | Indicate how many bytes would be used for an array of the given
 -- size.
 bytesInArray :: Int -> Int
-bytesInArray n = n `shiftL` 1
+bytesInArray n = n
 {-# INLINE bytesInArray #-}
 
 -- | Unchecked read of an immutable array.  May return garbage or
 -- crash on an out-of-bounds access.
-unsafeIndex :: Array -> Int -> Word16
+unsafeIndex :: Array -> Int -> Word8
 unsafeIndex Array{..} i@(I# i#) =
   CHECK_BOUNDS("unsafeIndex",aLen,i)
-    case indexWord16Array# aBA i# of r# -> (W16# r#)
+    case indexWord8Array# aBA i# of r# -> (W8# r#)
 {-# INLINE unsafeIndex #-}
 
 -- | Unchecked write of a mutable array.  May return garbage or crash
 -- on an out-of-bounds access.
-unsafeWrite :: MArray s -> Int -> Word16 -> ST s ()
-unsafeWrite MArray{..} i@(I# i#) (W16# e#) = ST $ \s1# ->
+unsafeWrite :: MArray s -> Int -> Word8 -> ST s ()
+unsafeWrite MArray{..} i@(I# i#) (W8# e#) = ST $ \s1# ->
   CHECK_BOUNDS("unsafeWrite",maLen,i)
-  case writeWord16Array# maBA i# e# s1# of
+  case writeWord8Array# maBA i# e# s1# of
     s2# -> (# s2#, () #)
 {-# INLINE unsafeWrite #-}
 
 -- | Convert an immutable array to a list.
-toList :: Array -> Int -> Int -> [Word16]
+toList :: Array -> Int -> Int -> [Word8]
 toList ary off len = loop 0
     where loop i | i < len   = unsafeIndex ary (off+i) : loop (i+1)
                  | otherwise = []
@@ -244,3 +247,18 @@ foreign import ccall unsafe "_hs_text_memcmp" memcmp
 foreign import ccall unsafe "_hs_text_memcpy" memcpyM
     :: MutableByteArray# s -> CSize -> MutableByteArray# s -> CSize -> CSize
     -> IO ()
+
+-- | Copy some elements of an immutable array to a pointer
+copyToPtr :: Ptr Word8               -- ^ Destination
+          -> Int                     -- ^ Destination offset
+          -> Array                   -- ^ Source
+          -> Int                     -- ^ Source offset
+          -> Int                     -- ^ First offset in destination /not/ to
+                                     -- copy (i.e. /not/ length)
+          -> IO ()
+copyToPtr dest i0 src j0 top
+    | i0 >= top = return ()
+    | otherwise = undefined dest (fromIntegral i0)
+                              (aBA src) (fromIntegral j0)
+                              (fromIntegral (top - i0))
+{-# INLINE copyToPtr #-}

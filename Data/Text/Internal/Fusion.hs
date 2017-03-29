@@ -63,6 +63,8 @@ import Data.Text.Internal.Fusion.Types
 import Data.Text.Internal.Fusion.Size
 import qualified Data.Text.Internal as I
 import qualified Data.Text.Internal.Encoding.Utf16 as U16
+import qualified Data.Text.Internal.Encoding.Utf8 as U8
+
 
 default(Int)
 
@@ -72,12 +74,10 @@ stream (Text arr off len) = Stream next off (betweenSize (len `shiftR` 1) len)
     where
       !end = off+len
       next !i
-          | i >= end                   = Done
-          | n >= 0xD800 && n <= 0xDBFF = Yield (U16.chr2 n n2) (i + 2)
-          | otherwise                  = Yield (unsafeChr n) (i + 1)
+          | i >= end  = Done
+          | otherwise = U8.decodeCharIndex (\c s -> Yield c (i + s)) idx i
           where
-            n  = A.unsafeIndex arr i
-            n2 = A.unsafeIndex arr (i + 1)
+            idx = A.unsafeIndex arr
 {-# INLINE [0] stream #-}
 
 -- | /O(n)/ Convert a 'Text' into a 'Stream Char', but iterate
@@ -87,12 +87,10 @@ reverseStream (Text arr off len) = Stream next (off+len-1) (betweenSize (len `sh
     where
       {-# INLINE next #-}
       next !i
-          | i < off                    = Done
-          | n >= 0xDC00 && n <= 0xDFFF = Yield (U16.chr2 n2 n) (i - 2)
-          | otherwise                  = Yield (unsafeChr n) (i - 1)
-          where
-            n  = A.unsafeIndex arr i
-            n2 = A.unsafeIndex arr (i - 1)
+          | i < off   = Done
+          | otherwise = U8.reverseDecodeCharIndex (\c w -> Yield c (i - w)) idx i
+        where
+          idx = A.unsafeIndex arr
 {-# INLINE [0] reverseStream #-}
 
 -- | /O(n)/ Convert a 'Stream Char' into a 'Text'.

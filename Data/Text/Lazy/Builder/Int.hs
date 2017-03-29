@@ -122,13 +122,13 @@ posDecimal marr off0 ds v0 = go (off0 + ds - 1) v0
           unsafeWrite marr (off - 1) $ get j
         get = fromIntegral . B.unsafeIndex digits
 
-minus, zero :: Word16
+minus, zero :: Word8
 {-# INLINE minus #-}
 {-# INLINE zero #-}
 minus = 45
 zero = 48
 
-i2w :: (Integral a) => a -> Word16
+i2w :: (Integral a) => a -> Word8
 {-# INLINE i2w #-}
 i2w v = zero + fromIntegral v
 

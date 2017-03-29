@@ -27,10 +27,16 @@ module Data.Text.Internal.Encoding.Utf8
     , chr3
     , chr4
     -- * Validation
+    , continuationByte
     , validate1
     , validate2
     , validate3
     , validate4
+
+    , decodeChar
+    , decodeCharIndex
+    , reverseDecodeCharIndex
+    , encodeChar
     ) where
 
 #if defined(TEST_SUITE)
@@ -41,7 +47,7 @@ module Data.Text.Internal.Encoding.Utf8
 import Control.Exception (assert)
 #endif
 import Data.Bits ((.&.))
-import Data.Text.Internal.Unsafe.Char (ord)
+import Data.Text.Internal.Unsafe.Char (ord, unsafeChr8)
 import Data.Text.Internal.Unsafe.Shift (shiftR)
 import GHC.Exts
 import GHC.Word (Word8(..))
@@ -166,3 +172,72 @@ validate4 x1 x2 x3 x4 = validate4_1 || validate4_2 || validate4_3
                   between x2 0x80 0x8F &&
                   between x3 0x80 0xBF &&
                   between x4 0x80 0xBF
+
+-- | Utility function: check if a word is an UTF-8 continuation byte
+continuationByte :: Word8 -> Bool
+continuationByte x = x .&. 0xC0 == 0x80
+{-# INLINE [0] continuationByte #-}
+
+-- | Inverse of 'continuationByte'
+notContinuationByte :: Word8 -> Bool
+notContinuationByte x = x .&. 0xC0 /= 0x80
+{-# INLINE [0] notContinuationByte #-}
+
+-- | Hybrid combination of 'unsafeChr8', 'chr2', 'chr3' and 'chr4'. This
+-- function will not touch the bytes it doesn't need.
+decodeChar :: (Char -> Int -> a) -> Word8 -> Word8 -> Word8 -> Word8 -> a
+decodeChar f !n1 n2 n3 n4
+    | n1 < 0xC0 = f (unsafeChr8 n1)    1
+    | n1 < 0xE0 = f (chr2 n1 n2)       2
+    | n1 < 0xF0 = f (chr3 n1 n2 n3)    3
+    | otherwise = f (chr4 n1 n2 n3 n4) 4
+{-# INLINE [0] decodeChar #-}
+
+-- | Version of 'decodeChar' which works with an indexing function.
+decodeCharIndex :: (Char -> Int -> a) -> (Int -> Word8) -> Int -> a
+decodeCharIndex f idx n =
+    decodeChar f (idx n) (idx (n + 1)) (idx (n + 2)) (idx (n + 3))
+{-# INLINE [0] decodeCharIndex #-}
+
+-- | Version of 'decodeCharIndex' that takes the rightmost index and tracks
+-- back to the left. Note that this function requires that the input is
+-- valid unicode.
+reverseDecodeCharIndex :: (Char -> Int -> a) -> (Int -> Word8) -> Int -> a
+reverseDecodeCharIndex f idx !r =
+    let !x1 = idx r in
+    if notContinuationByte x1 then f (unsafeChr8 x1) 1
+    else let !x2 = idx (r - 1) in
+    if notContinuationByte x2 then f (chr2 x2 x1) 2
+    else let !x3 = idx (r - 2) in
+    if notContinuationByte x3 then f (chr3 x3 x2 x1) 3
+    else let !x4 = idx (r - 3) in
+    f (chr4 x4 x3 x2 x1) 4
+{-# INLINE [0] reverseDecodeCharIndex #-}
+
+-- | This function provides fast UTF-8 encoding of characters because the user
+-- can supply custom functions for the different code paths, which should be
+-- inlined properly.
+encodeChar :: (Word8 -> a)
+           -> (Word8 -> Word8 -> a)
+           -> (Word8 -> Word8 -> Word8 -> a)
+           -> (Word8 -> Word8 -> Word8 -> Word8 -> a)
+           -> Char
+           -> a
+encodeChar f1 f2 f3 f4 c
+    -- One-byte character
+    | n < 0x80    = f1 (fromIntegral n)
+    -- Two-byte character
+    | n < 0x0800  = f2 (fromIntegral $ (n `shiftR` 6) + 0xC0)
+                       (fromIntegral $ (n .&. 0x3F)   + 0x80)
+    -- Three-byte character
+    | n < 0x10000 = f3 (fromIntegral $ (n `shiftR` 12)           + 0xE0)
+                       (fromIntegral $ ((n `shiftR` 6) .&. 0x3F) + 0x80)
+                       (fromIntegral $ (n .&. 0x3F)              + 0x80)
+    -- Four-byte character
+    | otherwise   = f4 (fromIntegral $ (n `shiftR` 18)            + 0xF0)
+                       (fromIntegral $ ((n `shiftR` 12) .&. 0x3F) + 0x80)
+                       (fromIntegral $ ((n `shiftR` 6)  .&. 0x3F) + 0x80)
+                       (fromIntegral $ (n .&. 0x3F)               + 0x80)
+  where
+    n = ord c
+{-# INLINE [0] encodeChar #-}

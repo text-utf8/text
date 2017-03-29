@@ -24,7 +24,7 @@ module Data.Text.Internal.Lazy.Search
 
 import qualified Data.Text.Array as A
 import Data.Int (Int64)
-import Data.Word (Word16, Word64)
+import Data.Word (Word8, Word64)
 import qualified Data.Text.Internal as T
 import Data.Text.Internal.Fusion.Types (PairS(..))
 import Data.Text.Internal.Lazy (Text(..), foldlChunks)
@@ -100,7 +100,7 @@ indices _ _ = []
 -- | Fast index into a partly unpacked 'Text'.  We take into account
 -- the possibility that the caller might try to access one element
 -- past the end.
-index :: T.Text -> Text -> Int64 -> Word16
+index :: T.Text -> Text -> Int64 -> Word8
 index (T.Text arr off len) xs !i
     | j < len   = A.unsafeIndex arr (off+j)
     | otherwise = case xs of
@@ -113,7 +113,7 @@ index (T.Text arr off len) xs !i
     where j = fromIntegral i
 
 -- | A variant of 'indices' that scans linearly for a single 'Word16'.
-indicesOne :: Word16 -> Int64 -> T.Text -> Text -> [Int64]
+indicesOne :: Word8 -> Int64 -> T.Text -> Text -> [Int64]
 indicesOne c = chunk
   where
     chunk !i (T.Text oarr ooff olen) os = go 0

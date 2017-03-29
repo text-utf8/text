@@ -21,14 +21,15 @@ module Data.Text.Unsafe
     , reverseIter_
     , unsafeHead
     , unsafeTail
-    , lengthWord16
-    , takeWord16
-    , dropWord16
+    , lengthWord8
+    , takeWord8
+    , dropWord8
     ) where
 
 #if defined(ASSERTS)
 import Control.Exception (assert)
 #endif
+import Data.Text.Internal.Encoding.Utf8 (decodeCharIndex, reverseDecodeCharIndex)
 import Data.Text.Internal.Encoding.Utf16 (chr2)
 import Data.Text.Internal (Text(..))
 import Data.Text.Internal.Unsafe (inlineInterleaveST, inlinePerformIO)
@@ -40,11 +41,8 @@ import GHC.IO (unsafeDupablePerformIO)
 -- omits the check for the empty case, so there is an obligation on
 -- the programmer to provide a proof that the 'Text' is non-empty.
 unsafeHead :: Text -> Char
-unsafeHead (Text arr off _len)
-    | m < 0xD800 || m > 0xDBFF = unsafeChr m
-    | otherwise                = chr2 m n
-    where m = A.unsafeIndex arr off
-          n = A.unsafeIndex arr (off+1)
+unsafeHead (Text arr off _len) =
+  decodeCharIndex (\c _ -> c) (A.unsafeIndex arr) off
 {-# INLINE unsafeHead #-}
 
 -- | /O(1)/ A variant of 'tail' for non-empty 'Text'. 'unsafeTail'
@@ -65,13 +63,8 @@ data Iter = Iter {-# UNPACK #-} !Char {-# UNPACK #-} !Int
 -- array, returning the current character and the delta to add to give
 -- the next offset to iterate at.
 iter :: Text -> Int -> Iter
-iter (Text arr off _len) i
-    | m < 0xD800 || m > 0xDBFF = Iter (unsafeChr m) 1
-    | otherwise                = Iter (chr2 m n) 2
-  where m = A.unsafeIndex arr j
-        n = A.unsafeIndex arr k
-        j = off + i
-        k = j + 1
+iter (Text arr off _len) i =
+  decodeCharIndex (\c d -> Iter c d) (A.unsafeIndex arr) (off + i)
 {-# INLINE iter #-}
 
 -- | /O(1)/ Iterate one step through a UTF-16 array, returning the
@@ -86,13 +79,10 @@ iter_ (Text arr off _len) i | m < 0xD800 || m > 0xDBFF = 1
 -- returning the current character and the delta to add (i.e. a
 -- negative number) to give the next offset to iterate at.
 reverseIter :: Text -> Int -> (Char,Int)
-reverseIter (Text arr off _len) i
-    | m < 0xDC00 || m > 0xDFFF = (unsafeChr m, -1)
-    | otherwise                = (chr2 n m,    -2)
-  where m = A.unsafeIndex arr j
-        n = A.unsafeIndex arr k
-        j = off + i
-        k = j - 1
+reverseIter (Text arr off _len) i =
+   reverseDecodeCharIndex (\c s -> (c, -s)) idx (off + i)
+  where
+    idx = A.unsafeIndex arr
 {-# INLINE reverseIter #-}
 
 -- | /O(1)/ Iterate one step backwards through a UTF-16 array,
@@ -108,16 +98,16 @@ reverseIter_ (Text arr off _len) i
 -- | /O(1)/ Return the length of a 'Text' in units of 'Word16'.  This
 -- is useful for sizing a target array appropriately before using
 -- 'unsafeCopyToPtr'.
-lengthWord16 :: Text -> Int
-lengthWord16 (Text _arr _off len) = len
-{-# INLINE lengthWord16 #-}
+lengthWord8 :: Text -> Int
+lengthWord8 (Text _arr _off len) = len
+{-# INLINE lengthWord8 #-}
 
 -- | /O(1)/ Unchecked take of 'k' 'Word16's from the front of a 'Text'.
-takeWord16 :: Int -> Text -> Text
-takeWord16 k (Text arr off _len) = Text arr off k
-{-# INLINE takeWord16 #-}
+takeWord8 :: Int -> Text -> Text
+takeWord8 k (Text arr off _len) = Text arr off k
+{-# INLINE takeWord8 #-}
 
 -- | /O(1)/ Unchecked drop of 'k' 'Word16's from the front of a 'Text'.
-dropWord16 :: Int -> Text -> Text
-dropWord16 k (Text arr off len) = Text arr (off+k) (len-k)
-{-# INLINE dropWord16 #-}
+dropWord8 :: Int -> Text -> Text
+dropWord8 k (Text arr off len) = Text arr (off+k) (len-k)
+{-# INLINE dropWord8 #-}
