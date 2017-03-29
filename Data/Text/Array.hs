@@ -75,10 +75,11 @@ import Foreign.C.Types (CInt(CInt), CSize(CSize))
 #else
 import Foreign.C.Types (CInt, CSize)
 #endif
-import GHC.Base (ByteArray#, MutableByteArray#, Int(..), (-#),
-                 indexWord8Array#, newByteArray#,
+import GHC.Base (IO(..), ByteArray#, MutableByteArray#, Int(..), (-#),
+                 indexWord8Array#, newByteArray#, plusAddr#,
                  unsafeFreezeByteArray#, writeWord8Array#,
-                 copyByteArray#, copyMutableByteArray#)
+                 copyByteArray#, copyMutableByteArray#, copyByteArrayToAddr#)
+import GHC.Exts (Ptr(..))
 import GHC.ST (ST(..), runST)
 import GHC.Word (Word8(..))
 import Prelude hiding (length, read)
@@ -238,15 +239,8 @@ equal arrA offA arrB offB count = inlinePerformIO $ do
   return $! i == 0
 {-# INLINE equal #-}
 
-foreign import ccall unsafe "_hs_text_memcpy" memcpyI
-    :: MutableByteArray# s -> CSize -> ByteArray# -> CSize -> CSize -> IO ()
-
 foreign import ccall unsafe "_hs_text_memcmp" memcmp
     :: ByteArray# -> CSize -> ByteArray# -> CSize -> CSize -> IO CInt
-
-foreign import ccall unsafe "_hs_text_memcpy" memcpyM
-    :: MutableByteArray# s -> CSize -> MutableByteArray# s -> CSize -> CSize
-    -> IO ()
 
 -- | Copy some elements of an immutable array to a pointer
 copyToPtr :: Ptr Word8               -- ^ Destination
@@ -256,9 +250,9 @@ copyToPtr :: Ptr Word8               -- ^ Destination
           -> Int                     -- ^ First offset in destination /not/ to
                                      -- copy (i.e. /not/ length)
           -> IO ()
-copyToPtr dest i0 src j0 top
+copyToPtr dest@(Ptr dest#) i0@(I# i0#) src j0@(I# j0#) top@(I# top#)
     | i0 >= top = return ()
-    | otherwise = undefined dest (fromIntegral i0)
-                              (aBA src) (fromIntegral j0)
-                              (fromIntegral (top - i0))
+    | otherwise =
+        IO $ \s -> case copyByteArrayToAddr# (aBA src) j0# (plusAddr# dest# i0#) (top# -# i0#) s of
+                     s' -> (# s', () #)
 {-# INLINE copyToPtr #-}
