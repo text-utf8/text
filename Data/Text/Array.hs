@@ -75,9 +75,10 @@ import Foreign.C.Types (CInt(CInt), CSize(CSize))
 #else
 import Foreign.C.Types (CInt, CSize)
 #endif
-import GHC.Base (ByteArray#, MutableByteArray#, Int(..),
+import GHC.Base (ByteArray#, MutableByteArray#, Int(..), (-#),
                  indexWord8Array#, newByteArray#,
-                 unsafeFreezeByteArray#, writeWord8Array#)
+                 unsafeFreezeByteArray#, writeWord8Array#,
+                 copyByteArray#, copyMutableByteArray#)
 import GHC.ST (ST(..), runST)
 import GHC.Word (Word8(..))
 import Prelude hiding (length, read)
@@ -86,7 +87,7 @@ import Prelude hiding (length, read)
 data Array = Array {
       aBA :: ByteArray#
 #if defined(ASSERTS)
-    , aLen :: {-# UNPACK #-} !Int -- length (in units of Word16, not bytes)
+    , aLen :: {-# UNPACK #-} !Int -- length in bytes
 #endif
     }
 
@@ -94,7 +95,7 @@ data Array = Array {
 data MArray s = MArray {
       maBA :: MutableByteArray# s
 #if defined(ASSERTS)
-    , maLen :: {-# UNPACK #-} !Int -- length (in units of Word16, not bytes)
+    , maLen :: {-# UNPACK #-} !Int -- length in bytes
 #endif
     }
 
@@ -196,16 +197,16 @@ copyM :: MArray s               -- ^ Destination
       -> Int                    -- ^ Source offset
       -> Int                    -- ^ Count
       -> ST s ()
-copyM dest didx src sidx count
+copyM dest didx@(I# didx#) src sidx@(I# sidx#) count@(I# count#)
     | count <= 0 = return ()
     | otherwise =
 #if defined(ASSERTS)
     assert (sidx + count <= length src) .
     assert (didx + count <= length dest) .
 #endif
-    unsafeIOToST $ memcpyM (maBA dest) (fromIntegral didx)
-                           (maBA src) (fromIntegral sidx)
-                           (fromIntegral count)
+    ST $ \s ->
+           case copyMutableByteArray# (maBA src) didx# (maBA dest) sidx# count# s of
+             s' -> (# s', () #)
 {-# INLINE copyM #-}
 
 -- | Copy some elements of an immutable array.
@@ -216,12 +217,11 @@ copyI :: MArray s               -- ^ Destination
       -> Int                    -- ^ First offset in destination /not/ to
                                 -- copy (i.e. /not/ length)
       -> ST s ()
-copyI dest i0 src j0 top
+copyI dest i0@(I# i0#) src _j0@(I# j0#) top@(I# top#)
     | i0 >= top = return ()
-    | otherwise = unsafeIOToST $
-                  memcpyI (maBA dest) (fromIntegral i0)
-                          (aBA src) (fromIntegral j0)
-                          (fromIntegral (top-i0))
+    | otherwise = ST $ \s ->
+                         case copyByteArray# (aBA src) j0# (maBA dest) i0# (top# -# i0#) s of
+                           s' -> (# s', () #)
 {-# INLINE copyI #-}
 
 -- | Compare portions of two arrays for equality.  No bounds checking
