@@ -124,7 +124,8 @@ decodeLatin1 (PS fp off len) = text a 0 len
  where
   a = A.run (A.new len >>= unsafeIOToST . go)
   go dest = withForeignPtr fp $ \ptr -> do
-    c_decode_latin1 (A.maBA dest) (ptr `plusPtr` off) (ptr `plusPtr` (off+len))
+    unsafeSTToIO $
+      A.copyFromPtr dest 0 ptr off len
     return dest
 
 -- | Decode a 'ByteString' containing UTF-8 encoded text.
