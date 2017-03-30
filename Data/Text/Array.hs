@@ -259,13 +259,15 @@ copyToPtr dest@(Ptr dest#) i0@(I# i0#) src j0@(I# j0#) top@(I# top#)
                      s' -> (# s', () #)
 {-# INLINE copyToPtr #-}
 
-copyFromPtr :: MArray RealWorld  -- ^ Destination
+copyFromPtr :: MArray s          -- ^ Destination
             -> Int               -- ^ Destination offset
             -> Ptr Word8         -- ^ Source
             -> Int               -- ^ Source offset
             -> Int               -- ^ Count
-            -> IO ()
-copyFromPtr dest i0@(I# i0#) src@(Ptr src#) j0@(I# j0#) count@(I# count#) =
-  -- TODO: bounds checking
-  IO $ \s -> case copyAddrToByteArray# (plusAddr# src# i0#) (maBA dest) j0# count# s of
-               s' -> (# s', () #)
+            -> ST s ()
+copyFromPtr dest i0@(I# i0#) src@(Ptr src#) j0@(I# j0#) count@(I# count#)
+  | count <= 0 = return ()
+  | otherwise =
+    ST $ \s -> case copyAddrToByteArray# (plusAddr# src# i0#) (maBA dest) j0# count# s of
+                 s' -> (# s', () #)
+{-# INLINE copyFromPtr #-}
