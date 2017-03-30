@@ -70,7 +70,7 @@ mapAccumL_resize = do
   assertEqual "mapAccumL should correctly fill buffers for two-word results"
              (0, T.replicate count "\65536") val
   assertEqual "mapAccumL should correctly size buffers for two-word results"
-             (count * 2) (T.lengthWord16 (snd val))
+             count (T.lengthWord8 (snd val))
 
 tests :: F.Test
 tests = F.testGroup "Regressions"

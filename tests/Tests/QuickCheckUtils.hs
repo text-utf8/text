@@ -39,7 +39,7 @@ import Control.Arrow (first, (***))
 import Control.DeepSeq (NFData (..), deepseq)
 import Control.Exception (bracket)
 import Data.String (IsString, fromString)
-import Data.Text.Foreign (I16)
+import Data.Text.Foreign (I8)
 import Data.Text.Lazy.Builder.RealFloat (FPFormat(..))
 import Data.Word (Word8, Word16)
 import Debug.Trace (trace)
@@ -66,11 +66,11 @@ import Data.Word (Word, Word64)
 genUnicode :: IsString a => Gen a
 genUnicode = fromString <$> string
 
-instance Random I16 where
+instance Random I8 where
     randomR = integralRandomR
     random  = randomR (minBound,maxBound)
 
-instance Arbitrary I16 where
+instance Arbitrary I8 where
     arbitrary     = arbitrarySizedIntegral
     shrink        = shrinkIntegral
 
