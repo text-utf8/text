@@ -63,44 +63,6 @@ decode(uint32_t *state, uint32_t* codep, uint32_t byte) {
 }
 
 /*
- * The ISO 8859-1 (aka latin-1) code points correspond exactly to the first 256 unicode
- * code-points, therefore we can trivially convert from a latin-1 encoded bytestring to
- * an UTF16 array
- */
-void
-_hs_text_decode_latin1(uint16_t *dest, const uint8_t *src,
-                       const uint8_t *srcend)
-{
-  const uint8_t *p = src;
-
-#if defined(__i386__) || defined(__x86_64__)
-  /* This optimization works on a little-endian systems by using
-     (aligned) 32-bit loads instead of 8-bit loads
-   */
-
-  /* consume unaligned prefix */
-  while (p != srcend && (uintptr_t)p & 0x3)
-    *dest++ = *p++;
-
-  /* iterate over 32-bit aligned loads */
-  while (p < srcend - 3) {
-    const uint32_t w = *((const uint32_t *)p);
-
-    *dest++ =  w        & 0xff;
-    *dest++ = (w >> 8)  & 0xff;
-    *dest++ = (w >> 16) & 0xff;
-    *dest++ = (w >> 24) & 0xff;
-
-    p += 4;
-  }
-#endif
-
-  /* handle unaligned suffix */
-  while (p != srcend)
-    *dest++ = *p++;
-}
-
-/*
  * A best-effort decoder. Runs until it hits either end of input or
  * the start of an invalid byte sequence.
  *
@@ -129,21 +91,22 @@ _hs_text_decode_latin1(uint16_t *dest, const uint8_t *src,
  */
 #if defined(__GNUC__) || defined(__clang__)
 static inline uint8_t const *
-_hs_text_decode_utf8_int(uint16_t *const dest, size_t *destoff,
+_hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
 			 const uint8_t **src, const uint8_t *srcend,
 			 uint32_t *codepoint0, uint32_t *state0)
   __attribute((always_inline));
 #endif
 
 static inline uint8_t const *
-_hs_text_decode_utf8_int(uint16_t *const dest, size_t *destoff,
+_hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
 			 const uint8_t **src, const uint8_t *srcend,
 			 uint32_t *codepoint0, uint32_t *state0)
 {
-  uint16_t *d = dest + *destoff;
+  uint8_t *d = dest + *destoff;
   const uint8_t *s = *src, *last = *src;
   uint32_t state = *state0;
   uint32_t codepoint = *codepoint0;
+  uint8_t c;
 
   while (s < srcend) {
 #if defined(__i386__) || defined(__x86_64__)
@@ -161,33 +124,19 @@ _hs_text_decode_utf8_int(uint16_t *const dest, size_t *destoff,
 	codepoint = *((uint32_t *) s);
 	if ((codepoint & 0x80808080) != 0)
 	  break;
+        *((uint32_t *)d) = codepoint;
 	s += 4;
-
-	/*
-	 * Tried 32-bit stores here, but the extra bit-twiddling
-	 * slowed the code down.
-	 */
-
-	*d++ = (uint16_t) (codepoint & 0xff);
-	*d++ = (uint16_t) ((codepoint >> 8) & 0xff);
-	*d++ = (uint16_t) ((codepoint >> 16) & 0xff);
-	*d++ = (uint16_t) ((codepoint >> 24) & 0xff);
+        d += 4;
       }
       last = s;
     }
 #endif
-
-    if (decode(&state, &codepoint, *s++) != UTF8_ACCEPT) {
+    c = *s++;
+    if (decode(&state, &codepoint, c) != UTF8_ACCEPT) {
       if (state != UTF8_REJECT)
+        *d++ = c;
 	continue;
       break;
-    }
-
-    if (codepoint <= 0xffff)
-      *d++ = (uint16_t) codepoint;
-    else {
-      *d++ = (uint16_t) (0xD7C0 + (codepoint >> 10));
-      *d++ = (uint16_t) (0xDC00 + (codepoint & 0x3FF));
     }
     last = s;
   }
@@ -201,7 +150,7 @@ _hs_text_decode_utf8_int(uint16_t *const dest, size_t *destoff,
 }
 
 uint8_t const *
-_hs_text_decode_utf8_state(uint16_t *const dest, size_t *destoff,
+_hs_text_decode_utf8_state(uint8_t *const dest, size_t *destoff,
                            const uint8_t **src,
                            const uint8_t *srcend,
                            uint32_t *codepoint0, uint32_t *state0)
@@ -217,7 +166,7 @@ _hs_text_decode_utf8_state(uint16_t *const dest, size_t *destoff,
  * Helper to decode buffer and discard final decoder state
  */
 const uint8_t *
-_hs_text_decode_utf8(uint16_t *const dest, size_t *destoff,
+_hs_text_decode_utf8(uint8_t *const dest, size_t *destoff,
                      const uint8_t *src, const uint8_t *const srcend)
 {
   uint32_t codepoint;
@@ -228,84 +177,4 @@ _hs_text_decode_utf8(uint16_t *const dest, size_t *destoff,
   if (state != UTF8_ACCEPT)
     ret -= 1;
   return ret;
-}
-
-void
-_hs_text_encode_utf8(uint8_t **destp, const uint16_t *src, size_t srcoff,
-		     size_t srclen)
-{
-  const uint16_t *srcend;
-  uint8_t *dest = *destp;
-
-  src += srcoff;
-  srcend = src + srclen;
-
- ascii:
-#if defined(__x86_64__)
-  while (srcend - src >= 4) {
-    uint64_t w = *((uint64_t *) src);
-
-    if (w & 0xFF80FF80FF80FF80ULL) {
-      if (!(w & 0x000000000000FF80ULL)) {
-	*dest++ = w & 0xFFFF;
-	src++;
-	if (!(w & 0x00000000FF800000ULL)) {
-	  *dest++ = (w >> 16) & 0xFFFF;
-	  src++;
-	  if (!(w & 0x0000FF8000000000ULL)) {
-	    *dest++ = (w >> 32) & 0xFFFF;
-	    src++;
-	  }
-	}
-      }
-      break;
-    }
-    *dest++ = w & 0xFFFF;
-    *dest++ = (w >> 16) & 0xFFFF;
-    *dest++ = (w >> 32) & 0xFFFF;
-    *dest++ = w >> 48;
-    src += 4;
-  }
-#endif
-
-#if defined(__i386__)
-  while (srcend - src >= 2) {
-    uint32_t w = *((uint32_t *) src);
-
-    if (w & 0xFF80FF80)
-      break;
-    *dest++ = w & 0xFFFF;
-    *dest++ = w >> 16;
-    src += 2;
-  }
-#endif
-
-  while (src < srcend) {
-    uint16_t w = *src++;
-
-    if (w <= 0x7F) {
-      *dest++ = w;
-      /* An ASCII byte is likely to begin a run of ASCII bytes.
-	 Falling back into the fast path really helps performance. */
-      goto ascii;
-    }
-    else if (w <= 0x7FF) {
-      *dest++ = (w >> 6) | 0xC0;
-      *dest++ = (w & 0x3f) | 0x80;
-    }
-    else if (w < 0xD800 || w > 0xDBFF) {
-      *dest++ = (w >> 12) | 0xE0;
-      *dest++ = ((w >> 6) & 0x3F) | 0x80;
-      *dest++ = (w & 0x3F) | 0x80;
-    } else {
-      uint32_t c = ((((uint32_t) w) - 0xD800) << 10) +
-	(((uint32_t) *src++) - 0xDC00) + 0x10000;
-      *dest++ = (c >> 18) | 0xF0;
-      *dest++ = ((c >> 12) & 0x3F) | 0x80;
-      *dest++ = ((c >> 6) & 0x3F) | 0x80;
-      *dest++ = (c & 0x3F) | 0x80;
-    }
-  }
-
-  *destp = dest;
 }

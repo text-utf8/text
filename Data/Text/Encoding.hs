@@ -321,11 +321,12 @@ encodeUtf8Builder = encodeUtf8BuilderEscaped (BP.liftFixedToBounded BP.word8)
 -- TODO: Extend documentation with references to source code in @blaze-html@
 -- or @aeson@ that uses this function.
 encodeUtf8BuilderEscaped :: BP.BoundedPrim Word8 -> Text -> B.Builder
-encodeUtf8BuilderEscaped be = undefined
+encodeUtf8BuilderEscaped be = mempty
 
 -- | Encode text using UTF-8 encoding.
 encodeUtf8 :: Text -> ByteString
-encodeUtf8 (Text arr off len) = undefined
+encodeUtf8 (Text arr off len) =
+  B.unsafeCreate len (\op -> A.copyToPtr op 0 arr off len)
 
 -- | Decode text from little endian UTF-16 encoding.
 decodeUtf16LEWith :: OnDecodeError -> ByteString -> Text
@@ -411,9 +412,3 @@ foreign import ccall unsafe "_hs_text_decode_utf8_state" c_decode_utf8_with_stat
     :: MutableByteArray# s -> Ptr CSize
     -> Ptr (Ptr Word8) -> Ptr Word8
     -> Ptr CodePoint -> Ptr DecoderState -> IO (Ptr Word8)
-
-foreign import ccall unsafe "_hs_text_decode_latin1" c_decode_latin1
-    :: MutableByteArray# s -> Ptr Word8 -> Ptr Word8 -> IO ()
-
-foreign import ccall unsafe "_hs_text_encode_utf8" c_encode_utf8
-    :: Ptr (Ptr Word8) -> ByteArray# -> CSize -> CSize -> IO ()
