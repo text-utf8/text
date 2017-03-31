@@ -37,6 +37,7 @@ module Data.Text.Internal.Encoding.Utf8
     , decodeCharIndex
     , reverseDecodeCharIndex
     , encodeChar
+    , charTailBytes
     ) where
 
 #if defined(TEST_SUITE)
@@ -241,3 +242,14 @@ encodeChar f1 f2 f3 f4 c
   where
     n = ord c
 {-# INLINE [0] encodeChar #-}
+
+-- | Count the number of UTF-8 tail bytes needed to encode a character
+charTailBytes :: Char -> Int
+charTailBytes x
+    | n < 0x00080 = 0
+    | n < 0x00800 = 1
+    | n < 0x10000 = 2
+    | otherwise   = 3
+  where
+    n = ord x
+{-# INLINE [0] charTailBytes #-}

@@ -111,7 +111,7 @@ unstream (Stream next0 s0 len) = runText $ \done -> do
                 Skip si'    -> encode si' di
                 Yield c si'
                     -- simply check for the worst case
-                    | maxi < di + 1 -> realloc si di
+                    | maxi < di + U8.charTailBytes c -> realloc si di
                     | otherwise -> do
                             n <- unsafeWrite arr di c
                             encode si' (di + n)
