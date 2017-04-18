@@ -11,16 +11,10 @@
 #include <stdio.h>
 #include "text_cbits.h"
 
-void _hs_text_memcpy(void *dest, size_t doff, const void *src, size_t soff,
-		     size_t n)
-{
-  memcpy(dest + (doff<<1), src + (soff<<1), n<<1);
-}
-
 int _hs_text_memcmp(const void *a, size_t aoff, const void *b, size_t boff,
-		    size_t n)
+        size_t n)
 {
-  return memcmp(a + (aoff<<1), b + (boff<<1), n<<1);
+  return memcmp(a + aoff, b + boff, n);
 }
 
 #define UTF8_ACCEPT 0
@@ -92,15 +86,15 @@ decode(uint32_t *state, uint32_t* codep, uint32_t byte) {
 #if defined(__GNUC__) || defined(__clang__)
 static inline uint8_t const *
 _hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
-			 const uint8_t **src, const uint8_t *srcend,
-			 uint32_t *codepoint0, uint32_t *state0)
+       const uint8_t **src, const uint8_t *srcend,
+       uint32_t *codepoint0, uint32_t *state0)
   __attribute((always_inline));
 #endif
 
 static inline uint8_t const *
 _hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
-			 const uint8_t **src, const uint8_t *srcend,
-			 uint32_t *codepoint0, uint32_t *state0)
+       const uint8_t **src, const uint8_t *srcend,
+       uint32_t *codepoint0, uint32_t *state0)
 {
   uint8_t *d = dest + *destoff;
   const uint8_t *s = *src, *last = *src;
@@ -121,11 +115,12 @@ _hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
 
     if (state == UTF8_ACCEPT) {
       while (s < srcend - 4) {
-	codepoint = *((uint32_t *) s);
-	if ((codepoint & 0x80808080) != 0)
-	  break;
+        codepoint = *((uint32_t *) s);
+        if ((codepoint & 0x80808080) != 0) {
+          break;
+        }
         *((uint32_t *)d) = codepoint;
-	s += 4;
+        s += 4;
         d += 4;
       }
       last = s;
@@ -133,9 +128,10 @@ _hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
 #endif
     c = *s++;
     if (decode(&state, &codepoint, c) != UTF8_ACCEPT) {
-      if (state != UTF8_REJECT)
+      if (state != UTF8_REJECT) {
         *d++ = c;
-	continue;
+        continue;
+      }
       break;
     }
     last = s;
@@ -156,7 +152,7 @@ _hs_text_decode_utf8_state(uint8_t *const dest, size_t *destoff,
                            uint32_t *codepoint0, uint32_t *state0)
 {
   uint8_t const *ret = _hs_text_decode_utf8_int(dest, destoff, src, srcend,
-						codepoint0, state0);
+            codepoint0, state0);
   if (*state0 == UTF8_REJECT)
     ret -=1;
   return ret;
@@ -172,7 +168,7 @@ _hs_text_decode_utf8(uint8_t *const dest, size_t *destoff,
   uint32_t codepoint;
   uint32_t state = UTF8_ACCEPT;
   uint8_t const *ret = _hs_text_decode_utf8_int(dest, destoff, &src, srcend,
-						&codepoint, &state);
+            &codepoint, &state);
   /* Back up if we have an incomplete or invalid encoding */
   if (state != UTF8_ACCEPT)
     ret -= 1;
