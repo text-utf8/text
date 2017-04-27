@@ -321,7 +321,40 @@ encodeUtf8Builder = encodeUtf8BuilderEscaped (BP.liftFixedToBounded BP.word8)
 -- TODO: Extend documentation with references to source code in @blaze-html@
 -- or @aeson@ that uses this function.
 encodeUtf8BuilderEscaped :: BP.BoundedPrim Word8 -> Text -> B.Builder
-encodeUtf8BuilderEscaped be = mempty
+encodeUtf8BuilderEscaped be =
+    -- manual eta-expansion to ensure inlining works as expected
+    \txt -> B.builder (mkBuildstep txt)
+  where
+    bound = max 4 $ BP.sizeBound be
+
+    mkBuildstep (Text arr off len) !k =
+        outerLoop off
+      where
+        iend = off + len
+
+        outerLoop !i0 !br@(B.BufferRange op0 ope)
+          | i0 >= iend       = k br
+          | outRemaining > 0 = goPartial (i0 + min outRemaining inpRemaining)
+          -- TODO: Use a loop with an integrated bound's check if outRemaining
+          -- is smaller than 8, as this will save on divisions.
+          | otherwise        = return $ B.bufferFull bound op0 (outerLoop i0)
+          where
+            outRemaining = (ope `minusPtr` op0) `div` bound
+            inpRemaining = iend - i0
+
+            goPartial !iendTmp = go i0 op0
+              where
+                go !i !op
+                  | i < iendTmp = case A.unsafeIndex arr i of
+                      w | w <= 0x7F -> do
+                            BP.runB be (fromIntegral w) op >>= go (i + 1)
+                        | otherwise -> do
+                            poke8 0 w
+                            go (i + 1) (op `plusPtr` 1)
+                  | otherwise =
+                      outerLoop i (B.BufferRange op ope)
+                  where
+                    poke8 j v = poke (op `plusPtr` j) (fromIntegral v :: Word8)
 
 -- | Encode text using UTF-8 encoding.
 encodeUtf8 :: Text -> ByteString
