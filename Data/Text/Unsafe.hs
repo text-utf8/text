@@ -70,9 +70,8 @@ iter (Text arr off _len) i =
 -- | /O(1)/ Iterate one step through a UTF-16 array, returning the
 -- delta to add to give the next offset to iterate at.
 iter_ :: Text -> Int -> Int
-iter_ (Text arr off _len) i | m < 0xD800 || m > 0xDBFF = 1
-                            | otherwise                = 2
-  where m = A.unsafeIndex arr (off+i)
+iter_ (Text arr off _len) i =
+  decodeCharIndex (\_ n -> n) (\x -> A.unsafeIndex arr (x + off)) i
 {-# INLINE iter_ #-}
 
 -- | /O(1)/ Iterate one step backwards through a UTF-16 array,
