@@ -127,11 +127,10 @@ _hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
     }
 #endif
     c = *s++;
+    *d++ = c;
     if (decode(&state, &codepoint, c) != UTF8_ACCEPT) {
-      if (state != UTF8_REJECT) {
-        *d++ = c;
+      if (state != UTF8_REJECT)
         continue;
-      }
       break;
     }
     last = s;
