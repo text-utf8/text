@@ -120,13 +120,7 @@ decodeASCII = decodeUtf8
 -- 'decodeLatin1' is semantically equivalent to
 --  @Data.Text.pack . Data.ByteString.Char8.unpack@
 decodeLatin1 :: ByteString -> Text
-decodeLatin1 (PS fp off len) = text a 0 len
- where
-  a = A.run (A.new len >>= unsafeIOToST . go)
-  go dest = withForeignPtr fp $ \ptr -> do
-    unsafeSTToIO $
-      A.copyFromPtr dest 0 ptr off len
-    return dest
+decodeLatin1 s = F.unstream (E.streamASCII s)
 
 -- | Decode a 'ByteString' containing UTF-8 encoded text.
 decodeUtf8With :: OnDecodeError -> ByteString -> Text
