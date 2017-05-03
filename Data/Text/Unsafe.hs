@@ -59,7 +59,7 @@ unsafeTail t@(Text arr off len) =
 
 data Iter = Iter {-# UNPACK #-} !Char {-# UNPACK #-} !Int
 
--- | /O(1)/ Iterate (unsafely) one step forwards through a UTF-16
+-- | /O(1)/ Iterate (unsafely) one step forwards through a UTF-8
 -- array, returning the current character and the delta to add to give
 -- the next offset to iterate at.
 iter :: Text -> Int -> Iter
@@ -67,31 +67,29 @@ iter (Text arr off _len) i =
   decodeCharIndex (\c d -> Iter c d) (A.unsafeIndex arr) (off + i)
 {-# INLINE iter #-}
 
--- | /O(1)/ Iterate one step through a UTF-16 array, returning the
+-- | /O(1)/ Iterate one step through a UTF-8 array, returning the
 -- delta to add to give the next offset to iterate at.
 iter_ :: Text -> Int -> Int
 iter_ (Text arr off _len) i =
   decodeCharIndex (\_ n -> n) (\x -> A.unsafeIndex arr (x + off)) i
 {-# INLINE iter_ #-}
 
--- | /O(1)/ Iterate one step backwards through a UTF-16 array,
+-- | /O(1)/ Iterate one step backwards through a UTF-8 array,
 -- returning the current character and the delta to add (i.e. a
 -- negative number) to give the next offset to iterate at.
 reverseIter :: Text -> Int -> (Char,Int)
 reverseIter (Text arr off _len) i =
-   reverseDecodeCharIndex (\c s -> (c, -s)) idx (off + i)
+    reverseDecodeCharIndex (\c s -> (c, -s)) idx (off + i)
   where
     idx = A.unsafeIndex arr
 {-# INLINE reverseIter #-}
 
--- | /O(1)/ Iterate one step backwards through a UTF-16 array,
+-- | /O(1)/ Iterate one step backwards through a UTF-8 array,
 -- returning the delta to add (i.e. a negative number) to give the
 -- next offset to iterate at.
 reverseIter_ :: Text -> Int -> Int
-reverseIter_ (Text arr off _len) i
-    | m < 0xDC00 || m > 0xDFFF = -1
-    | otherwise                = -2
-  where m = A.unsafeIndex arr (off+i)
+reverseIter_ (Text arr off _len) i =
+  reverseDecodeCharIndex (\_ n -> -n) (\x -> A.unsafeIndex arr (x + off)) i
 {-# INLINE reverseIter_ #-}
 
 -- | /O(1)/ Return the length of a 'Text' in units of 'Word16'.  This
