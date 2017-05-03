@@ -155,20 +155,12 @@ reverse (Stream next s len0)
                        A.copyM marr' (newLen-len) marr 0 len
                        write s1 (len+i) newLen marr'
                      | otherwise -> write s1 i len marr
-            where n = ord x
-                  least | n < 0x10000 = 0
-                        | otherwise   = 1
-                  m = n - 0x10000
-                  lo = fromIntegral $ (m `shiftR` 10) + 0xD800
-                  hi = fromIntegral $ (m .&. 0x3FF) + 0xDC00
-                  write t j l mar
-                      | n < 0x10000 = do
-                          A.unsafeWrite mar j (fromIntegral n)
-                          loop t (j-1) l mar
-                      | otherwise = do
-                          A.unsafeWrite mar (j-1) lo
-                          A.unsafeWrite mar j hi
-                          loop t (j-2) l mar
+            where
+              n = ord x
+              least = U8.charTailBytes x
+              write t j l mar = do
+                _ <- unsafeWrite mar (j-least) x
+                loop t (j-least-1) l mar
 {-# INLINE [0] reverse #-}
 
 -- | /O(n)/ Perform the equivalent of 'scanr' over a list, only with
