@@ -228,7 +228,7 @@ mapAccumL f z0 (Stream next0 s0 len) = (nz, I.text na 0 nl)
                                outer arr' top' z s i
                 | otherwise -> do d <- unsafeWrite arr i c
                                   loop z' s' (i+d)
-                where (z',c) = f z x
-                      j | ord c < 0x10000 = i
-                        | otherwise       = i + 1
+                where
+                  (z',c) = f z x
+                  j = i + U8.charTailBytes c
 {-# INLINE [0] mapAccumL #-}
