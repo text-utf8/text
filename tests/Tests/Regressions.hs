@@ -61,16 +61,16 @@ utf8_decode_unsafe = do
   assertBool "broken error recovery shouldn't break us" (t == "\xfffd")
 
 -- Reported by Eric Seidel: we mishandled mapping Chars that fit in a
--- single Word16 to Chars that require two.
+-- single byte to Chars that require multiple bytes.
 mapAccumL_resize :: IO ()
 mapAccumL_resize = do
-  let f a _ = (a, '\65536')
+  let f a _ = (a, '\65536') -- bytes in utf8 representation: "\240\144\128\128"
       count = 5
       val   = T.mapAccumL f (0::Int) (T.replicate count "a")
-  assertEqual "mapAccumL should correctly fill buffers for two-word results"
+  assertEqual "mapAccumL should correctly fill buffers for 4-byte results"
              (0, T.replicate count "\65536") val
-  assertEqual "mapAccumL should correctly size buffers for two-word results"
-             count (T.lengthWord8 (snd val))
+  assertEqual "mapAccumL should correctly size buffers for 4-byte results"
+             (count * 4) (T.lengthWord8 (snd val))
 
 tests :: F.Test
 tests = F.testGroup "Regressions"

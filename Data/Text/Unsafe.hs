@@ -92,7 +92,7 @@ reverseIter_ (Text arr off _len) i =
   reverseDecodeCharIndex (\_ n -> -n) (\x -> A.unsafeIndex arr (x + off)) i
 {-# INLINE reverseIter_ #-}
 
--- | /O(1)/ Return the length of a 'Text' in units of 'Word16'.  This
+-- | /O(1)/ Return the length of a 'Text' in units of 'Word8'.  This
 -- is useful for sizing a target array appropriately before using
 -- 'unsafeCopyToPtr'.
 lengthWord8 :: Text -> Int
