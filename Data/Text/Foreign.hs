@@ -83,8 +83,8 @@ fromPtr ptr (I8 len) =
 #endif
     return $! Text arr 0 len
   where
-    arr = A.run (A.new len >>= unsafeIOToST . copy)
-    copy marr = undefined -- TODO A.copyFromPtr marr 0 ptr 0 len *> pure marr
+    arr = A.run (A.new len >>= copy)
+    copy marr = A.copyFromPtr marr 0 ptr 0 len *> pure marr
 
 -- $lowlevel
 --
