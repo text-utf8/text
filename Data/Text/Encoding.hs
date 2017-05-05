@@ -124,30 +124,7 @@ decodeLatin1 s = F.unstream (E.streamASCII s)
 
 -- | Decode a 'ByteString' containing UTF-8 encoded text.
 decodeUtf8With :: OnDecodeError -> ByteString -> Text
-decodeUtf8With onErr (PS fp off len) = runText $ \done -> do
-  let go dest = withForeignPtr fp $ \ptr ->
-        with (0::CSize) $ \destOffPtr -> do
-          let end = ptr `plusPtr` (off + len)
-              loop curPtr = do
-                curPtr' <- c_decode_utf8 (A.maBA dest) destOffPtr curPtr end
-                if curPtr' == end
-                  then do
-                    n <- peek destOffPtr
-                    unsafeSTToIO (done dest (fromIntegral n))
-                  else do
-                    x <- peek curPtr'
-                    case onErr desc (Just x) of
-                      Nothing -> loop $ curPtr' `plusPtr` 1
-                      Just c -> do
-                        destOff <- peek destOffPtr
-                        w <- unsafeSTToIO $
-                             unsafeWrite dest (fromIntegral destOff) (safe c)
-                        poke destOffPtr (destOff + fromIntegral w)
-                        loop $ curPtr' `plusPtr` 1
-          loop (ptr `plusPtr` off)
-  (unsafeIOToST . go) =<< A.new len
- where
-  desc = "Data.Text.Internal.Encoding.decodeUtf8: Invalid UTF-8 stream"
+decodeUtf8With onErr bs = F.unstream (E.streamUtf8 onErr bs)
 {- INLINE[0] decodeUtf8With #-}
 
 -- $stream

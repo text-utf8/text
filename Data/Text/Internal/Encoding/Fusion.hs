@@ -41,6 +41,7 @@ import Data.ByteString.Internal (ByteString(..), mallocByteString, memcpy)
 import Data.Text.Internal.Fusion (Step(..), Stream(..))
 import Data.Text.Internal.Fusion.Size
 import Data.Text.Encoding.Error
+import Data.Text.Internal (safe)
 import Data.Text.Internal.Encoding.Fusion.Common
 import Data.Text.Internal.Unsafe.Char (unsafeChr, unsafeChr8, unsafeChr32)
 import Data.Text.Internal.Unsafe.Shift (shiftL, shiftR)
@@ -203,6 +204,6 @@ decodeError :: forall s. String -> String -> OnDecodeError -> Maybe Word8
 decodeError func kind onErr mb i =
     case onErr desc mb of
       Nothing -> Skip i
-      Just c  -> Yield c i
+      Just c  -> Yield (safe c) i
     where desc = "Data.Text.Internal.Encoding.Fusion." ++ func ++ ": Invalid " ++
                  kind ++ " stream"
