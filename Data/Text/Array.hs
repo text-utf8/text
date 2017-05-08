@@ -208,7 +208,7 @@ copyM dest didx@(I# didx#) src sidx@(I# sidx#) count@(I# count#)
     assert (didx + count <= length dest) .
 #endif
     ST $ \s ->
-           case copyMutableByteArray# (maBA src) didx# (maBA dest) sidx# count# s of
+           case copyMutableByteArray# (maBA src) sidx# (maBA dest) didx# count# s of
              s' -> (# s', () #)
 {-# INLINE copyM #-}
 
