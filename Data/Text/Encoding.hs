@@ -316,21 +316,39 @@ encodeUtf8BuilderEscaped be =
             goPartial !iendTmp = go i0 op0
               where
                 go !i !op
-                  | i < iendTmp = case A.unsafeIndex arr i of
-                      w | w <= 0x7F -> do
-                            BP.runB be (fromIntegral w) op >>= go (i + 1)
+                  | i < iendTmp = case a of
+                      a | a <= 0x7F ->
+                            BP.runB be (fromIntegral a) op >>= go (i + 1)
+                        | 0xC2 <= a && a <= 0xDF -> do
+                            poke8 0 a
+                            poke8 1 b
+                            go (i + 2) (op `plusPtr` 2)
+                        | 0xE0 <= a && a <= 0xEF -> do
+                            poke8 0 a
+                            poke8 1 b
+                            poke8 2 c
+                            go (i + 3) (op `plusPtr` 3)
                         | otherwise -> do
-                            poke8 0 w
-                            go (i + 1) (op `plusPtr` 1)
+                            poke8 0 a
+                            poke8 1 b
+                            poke8 2 c
+                            poke8 3 d
+                            go (i + 4) (op `plusPtr` 4)
                   | otherwise =
                       outerLoop i (B.BufferRange op ope)
                   where
                     poke8 j v = poke (op `plusPtr` j) (fromIntegral v :: Word8)
+                    a = A.unsafeIndex arr i
+                    b = A.unsafeIndex arr (i+1)
+                    c = A.unsafeIndex arr (i+2)
+                    d = A.unsafeIndex arr (i+3)
+
 
 -- | Encode text using UTF-8 encoding.
 encodeUtf8 :: Text -> ByteString
-encodeUtf8 (Text arr off len) =
-  B.unsafeCreate len (\op -> A.copyToPtr op 0 arr off len)
+encodeUtf8 (Text arr off len)
+  | len == 0  = B.empty
+  | otherwise = B.unsafeCreate len (\op -> A.copyToPtr op 0 arr off len)
 
 -- | Decode text from little endian UTF-16 encoding.
 decodeUtf16LEWith :: OnDecodeError -> ByteString -> Text
