@@ -44,8 +44,12 @@ module Data.Text.Array
     , toList
     , unsafeFreeze
     , unsafeIndex
+    , unsafeIndex32
+    , unsafeIndex64
     , new
     , unsafeWrite
+    , unsafeWrite32
+    , unsafeWrite64
     ) where
 
 #if defined(ASSERTS)
@@ -77,13 +81,13 @@ import Foreign.C.Types (CInt(CInt), CSize(CSize))
 import Foreign.C.Types (CInt, CSize)
 #endif
 import GHC.Base (IO(..), RealWorld, ByteArray#, MutableByteArray#, Int(..), (-#),
-                 indexWord8Array#, newByteArray#, plusAddr#,
-                 unsafeFreezeByteArray#, writeWord8Array#,
+                 indexWord8Array#, indexWord32Array#, indexWord64Array#, newByteArray#, plusAddr#,
+                 unsafeFreezeByteArray#, writeWord8Array#, writeWord32Array#, writeWord64Array#,
                  copyByteArray#, copyMutableByteArray#, copyByteArrayToAddr#,
                  copyAddrToByteArray#)
 import GHC.Exts (Ptr(..))
 import GHC.ST (ST(..), runST)
-import GHC.Word (Word8(..))
+import GHC.Word (Word8(..), Word32(..), Word64(..))
 import Prelude hiding (length, read)
 
 -- | Immutable array type.
@@ -160,6 +164,22 @@ unsafeIndex Array{..} i@(I# i#) =
     case indexWord8Array# aBA i# of r# -> (W8# r#)
 {-# INLINE unsafeIndex #-}
 
+-- | Unchecked read of an immutable array.  May return garbage or
+-- crash on an out-of-bounds access.
+unsafeIndex32 :: Array -> Int -> Word32
+unsafeIndex32 Array{..} i@(I# i#) =
+  CHECK_BOUNDS("unsafeIndex32",aLen `quot` 4,i)
+    case indexWord32Array# aBA i# of r# -> (W32# r#)
+{-# INLINE unsafeIndex32 #-}
+
+-- | Unchecked read of an immutable array.  May return garbage or
+-- crash on an out-of-bounds access.
+unsafeIndex64 :: Array -> Int -> Word64
+unsafeIndex64 Array{..} i@(I# i#) =
+  CHECK_BOUNDS("unsafeIndex64",aLen `quot` 8,i)
+    case indexWord64Array# aBA i# of r# -> (W64# r#)
+{-# INLINE unsafeIndex64 #-}
+
 -- | Unchecked write of a mutable array.  May return garbage or crash
 -- on an out-of-bounds access.
 unsafeWrite :: MArray s -> Int -> Word8 -> ST s ()
@@ -168,6 +188,24 @@ unsafeWrite MArray{..} i@(I# i#) (W8# e#) = ST $ \s1# ->
   case writeWord8Array# maBA i# e# s1# of
     s2# -> (# s2#, () #)
 {-# INLINE unsafeWrite #-}
+
+-- | Unchecked write of a mutable array.  May return garbage or crash
+-- on an out-of-bounds access.
+unsafeWrite32 :: MArray s -> Int -> Word32 -> ST s ()
+unsafeWrite32 MArray{..} i@(I# i#) (W32# e#) = ST $ \s1# ->
+  CHECK_BOUNDS("unsafeWrite32",maLen `quot` 4,i)
+  case writeWord32Array# maBA i# e# s1# of
+    s2# -> (# s2#, () #)
+{-# INLINE unsafeWrite32 #-}
+
+-- | Unchecked write of a mutable array.  May return garbage or crash
+-- on an out-of-bounds access.
+unsafeWrite64 :: MArray s -> Int -> Word64 -> ST s ()
+unsafeWrite64 MArray{..} i@(I# i#) (W64# e#) = ST $ \s1# ->
+  CHECK_BOUNDS("unsafeWrite64",maLen `quot` 8,i)
+  case writeWord64Array# maBA i# e# s1# of
+    s2# -> (# s2#, () #)
+{-# INLINE unsafeWrite64 #-}
 
 -- | Convert an immutable array to a list.
 toList :: Array -> Int -> Int -> [Word8]
