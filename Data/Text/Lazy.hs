@@ -1154,7 +1154,7 @@ takeWhileEnd :: (Char -> Bool) -> Text -> Text
 takeWhileEnd p = takeChunk empty . L.reverse . toChunks
   where takeChunk acc []     = acc
         takeChunk acc (t:ts)
-          | T.lengthWord16 t' < T.lengthWord16 t
+          | T.lengthWord8 t' < T.lengthWord8 t
                              = chunk t' acc
           | otherwise        = takeChunk (Chunk t' acc) ts
           where t' = T.takeWhileEnd p t
