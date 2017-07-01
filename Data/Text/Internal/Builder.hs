@@ -138,7 +138,7 @@ empty = Builder (\ k buf -> k buf)
 --  * @'toLazyText' ('singleton' c) = 'L.singleton' c@
 --
 singleton :: Char -> Builder
-singleton c = writeAtMost 2 $ \ marr o -> unsafeWrite marr o c
+singleton c = writeAtMost 4 $ \ marr o -> unsafeWrite marr o c
 {-# INLINE singleton #-}
 
 ------------------------------------------------------------------------
