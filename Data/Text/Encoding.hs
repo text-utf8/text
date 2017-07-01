@@ -297,7 +297,25 @@ decodeUtf8' = unsafeDupablePerformIO . try . evaluate . decodeUtf8With strictDec
 
 -- | Encode text to a ByteString 'B.Builder' using UTF-8 encoding.
 encodeUtf8Builder :: Text -> B.Builder
-encodeUtf8Builder = encodeUtf8BuilderEscaped (BP.liftFixedToBounded BP.word8)
+encodeUtf8Builder = \t -> B.builder (textCopyStep t)
+{-# INLINE encodeUtf8Builder #-}
+
+textCopyStep :: Text -> B.BuildStep a -> B.BuildStep a
+textCopyStep !(Text arr off len) k = go 0 len
+  where
+    go !ip !ipe !(B.BufferRange op ope)
+      | inpRemaining <= outRemaining = do
+        A.copyToPtr op 0 arr (off + ip) inpRemaining
+        let !br' = B.BufferRange (op `plusPtr` inpRemaining) ope
+        k br'
+      | otherwise = do
+        A.copyToPtr op 0 arr (off + ip) outRemaining
+        let !ip' = ip + outRemaining
+        return $ B.bufferFull 1 ope (go ip' ipe)
+      where
+        outRemaining = ope `minusPtr` op
+        inpRemaining = ipe - ip
+{-# INLINE textCopyStep #-}
 
 -- | Encode text using UTF-8 encoding and escape the ASCII characters using
 -- a 'BP.BoundedPrim'.
