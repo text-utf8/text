@@ -127,14 +127,18 @@ _hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
     }
 #endif
     c = *s++;
-    *d++ = c;
-    if (decode(&state, &codepoint, c) != UTF8_ACCEPT) {
-      if (state != UTF8_REJECT)
-        continue;
-      break;
+    switch (decode(&state, &codepoint, c)) {
+      case UTF8_ACCEPT:
+        last = s;
+        /* fallthrough */
+      default:
+        *d++ = c;
+        break;
+      case UTF8_REJECT:
+        goto done;
     }
-    last = s;
   }
+done:
 
   *destoff = d - dest;
   *codepoint0 = codepoint;
