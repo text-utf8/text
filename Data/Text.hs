@@ -587,44 +587,44 @@ length t = S.length (stream t)
 -- http://www.daemonology.net/blog/2008-06-05-faster-utf8-strlen.html
 fastLength :: Text -> Int
 fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) = 
-    initFastLength (A.aBA arr) off0# 0## where
-    
+    initFastLength off0# 0## where
+    ba = A.aBA arr
     end# = off0# +# len0#
     endVec# = quotInt# end# 8# -- bytes/word64
     -- loop until we're at a multiple of 8 bytes. Works by counting how many
     -- non-start-of-codepoint bytes there are (bytes where the first bit is set
     -- and the second isn't)
-    initFastLength :: ByteArray# -> Int# -> Word# -> Int
-    initFastLength ba off# nonStart#
+    initFastLength :: Int# -> Word# -> Int
+    initFastLength off# nonStart#
         | Exts.isTrue# (off# >=# end#)  = Exts.I# (len0# -# word2Int# nonStart#)
         | Exts.isTrue# (andI# off# 0x07# ==# 0#) = 
-            vecFastLength ba (quotInt# off# 8#) nonStart#
+            vecFastLength (quotInt# off# 8#) nonStart#
         | otherwise = case indexWord8Array# ba off# of
-            b -> initFastLength ba (off# +# 1#)
+            b -> initFastLength (off# +# 1#)
                     (plusWord# nonStart# (and# 
                         (uncheckedShiftRL# b        7#) 
                         (uncheckedShiftRL# (not# b) 6#)))
 
     -- process bytes 8 at a time, offset is in 64bit words, not bytes
-    vecFastLength :: ByteArray# -> Int# -> Word# -> Int
-    vecFastLength ba off64# nonStart# 
-        | Exts.isTrue# (off64# >=# endVec#) = endFastLength ba (off64# *# 8#) nonStart#
+    vecFastLength :: Int# -> Word# -> Int
+    vecFastLength off64# nonStart# 
+        | Exts.isTrue# (off64# >=# endVec#) = endFastLength (off64# *# 8#) nonStart#
         | otherwise = let
                 n#         = indexWord64Array# ba off64#
                 ones#     = quotWord# (minusWord# 0## 1##) 0xFF##
                 highOnes# = timesWord# ones# 0x80## 
                 u# = and# (uncheckedShiftRL# (and# n# highOnes#) 7#) 
                           (uncheckedShiftRL# (not# n#)           6#)
-                in vecFastLength ba (off64# +# 1#)
+                in vecFastLength (off64# +# 1#)
                     (plusWord# nonStart# 
                         (uncheckedShiftRL# (timesWord# u# ones#) 56#))
 
     -- clean up remaining data at end of buffer
-    endFastLength :: ByteArray# -> Int# -> Word# -> Int
-    endFastLength ba off# nonStart#
+    endFastLength :: Int# -> Word# -> Int
+    endFastLength off# nonStart#
         | Exts.isTrue# (off# >=# end#) = Exts.I# (len0# -# word2Int# nonStart#)
         | otherwise = case indexWord8Array# ba off# of
-            b -> endFastLength ba (off# +# 1#)
+            b -> endFastLength (off# +# 1#)
                     (plusWord# nonStart# (and# 
                         (uncheckedShiftRL# b        7#) 
                         (uncheckedShiftRL# (not# b) 6#)))
