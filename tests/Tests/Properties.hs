@@ -256,6 +256,7 @@ s_length          = length `eqP` S.length
 sf_length p       = (length . L.filter p) `eqP` (S.length . S.filter p)
 sl_length         = (fromIntegral . length) `eqP` SL.length
 t_length          = length `eqP` T.length
+t_fastLength      = length `eqP` T.length
 tl_length         = L.genericLength `eqP` TL.length
 t_compareLength t = (compare (T.length t)) `eq` T.compareLength t
 tl_compareLength t= (compare (TL.length t)) `eq` TL.compareLength t
@@ -1002,6 +1003,7 @@ tests =
       testProperty "sf_length" sf_length,
       testProperty "sl_length" sl_length,
       testProperty "t_length" t_length,
+      testProperty "t_fastLength" t_fastLength,
       testProperty "tl_length" tl_length,
       testProperty "t_compareLength" t_compareLength,
       testProperty "tl_compareLength" tl_compareLength

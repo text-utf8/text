@@ -66,6 +66,7 @@ module Data.Text
     , init
     , null
     , length
+    , fastLength
     , compareLength
 
     -- * Transformations
@@ -246,6 +247,8 @@ import qualified GHC.Exts as Exts
 #if MIN_VERSION_base(4,7,0)
 import Text.Printf (PrintfArg, formatArg, formatString)
 #endif
+
+import GHC.Prim 
 
 -- $strict
 --
@@ -576,6 +579,56 @@ length t = S.length (stream t)
 {-# INLINE [0] length #-}
 -- length needs to be phased after the compareN/length rules otherwise
 -- it may inline before the rules have an opportunity to fire.
+
+-- | /O(n)/ Uses a fast, SIMD like algorithm to compute how many codepoints
+-- are present in a 'Text' value.
+
+-- Based on the algorithm found at
+-- http://www.daemonology.net/blog/2008-06-05-faster-utf8-strlen.html
+fastLength :: Text -> Int
+fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) = 
+    initFastLength (A.aBA arr) off0# 0## where
+    
+    end# = off0# +# len0#
+    endVec# = quotInt# end# 8# -- bytes/word64
+    -- loop until we're at a multiple of 8 bytes. Works by counting how many
+    -- non-start-of-codepoint bytes there are (bytes where the first bit is set
+    -- and the second isn't)
+    initFastLength :: ByteArray# -> Int# -> Word# -> Int
+    initFastLength ba off# nonStart#
+        | Exts.isTrue# (off# >=# end#)  = Exts.I# (len0# -# word2Int# nonStart#)
+        | Exts.isTrue# (andI# off# 0x07# ==# 0#) = 
+            vecFastLength ba (quotInt# off# 8#) nonStart#
+        | otherwise = case indexWord8Array# ba off# of
+            b -> initFastLength ba (off# +# 1#)
+                    (plusWord# nonStart# (and# 
+                        (uncheckedShiftRL# b        7#) 
+                        (uncheckedShiftRL# (not# b) 6#)))
+
+    -- process bytes 8 at a time, offset is in 64bit words, not bytes
+    vecFastLength :: ByteArray# -> Int# -> Word# -> Int
+    vecFastLength ba off64# nonStart# 
+        | Exts.isTrue# (off64# >=# endVec#) = endFastLength ba (off64# *# 8#) nonStart#
+        | otherwise = let
+                n#         = indexWord64Array# ba off64#
+                ones#     = quotWord# (minusWord# 0## 1##) 0xFF##
+                highOnes# = timesWord# ones# 0x80## 
+                u# = and# (uncheckedShiftRL# (and# n# highOnes#) 7#) 
+                          (uncheckedShiftRL# (not# n#)           6#)
+                in vecFastLength ba (off64# +# 1#)
+                    (plusWord# nonStart# 
+                        (uncheckedShiftRL# (timesWord# u# ones#) 56#))
+
+    -- clean up remaining data at end of buffer
+    endFastLength :: ByteArray# -> Int# -> Word# -> Int
+    endFastLength ba off# nonStart#
+        | Exts.isTrue# (off# >=# end#) = Exts.I# (len0# -# word2Int# nonStart#)
+        | otherwise = case indexWord8Array# ba off# of
+            b -> endFastLength ba (off# +# 1#)
+                    (plusWord# nonStart# (and# 
+                        (uncheckedShiftRL# b        7#) 
+                        (uncheckedShiftRL# (not# b) 6#)))
+
 
 -- | /O(n)/ Compare the count of characters in a 'Text' to a number.
 -- Subject to fusion.
