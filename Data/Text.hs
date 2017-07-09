@@ -7,6 +7,10 @@
 {-# LANGUAGE TypeFamilies #-}
 #endif
 
+#if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
+#include "MachDeps.h"
+#endif
+
 -- |
 -- Module      : Data.Text
 -- Copyright   : (c) 2009, 2010, 2011, 2012 Bryan O'Sullivan,
@@ -585,49 +589,73 @@ length t = S.length (stream t)
 
 -- Based on the algorithm found at
 -- http://www.daemonology.net/blog/2008-06-05-faster-utf8-strlen.html
+
+#if WORD_SIZE_IN_BITS == 64
+#define READWORD   indexWord64Array#
+#define ALIGN_MASK 0x07#
+#define WORDBYTES  8#
+#define SUMSHIFT   56#
+-- SUMSHIFT = (sizeof(Word#)-1) * 8
+#else
+#define READWORD   indexWord32Array#
+#define ALIGN_MASK 0x03#
+#define WORDBYTES  4#
+#define SUMSHIFT   24#
+#endif
+
 fastLength :: Text -> Int
 fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) = 
     initFastLength off0# 0## where
     ba = A.aBA arr
     end# = off0# +# len0#
-    endVec# = quotInt# end# 8# -- bytes/word64
-    -- loop until we're at a multiple of 8 bytes. Works by counting how many
-    -- non-start-of-codepoint bytes there are (bytes where the first bit is set
-    -- and the second isn't)
+    endVec# = quotInt# end# WORDBYTES
+    -- loop until we're at a multiple of WORDBYTES bytes. Works by counting how
+    -- many non-start-of-codepoint bytes there are (bytes matching the pattern
+    -- 0b10xxxxxx) and subtracting that from the number of bytes in the Text -
+    -- all other bytes must have been codepoint starting bytes if it is valid
+    -- utf-8.
     initFastLength :: Int# -> Word# -> Int
     initFastLength off# nonStart#
+        -- For short, unaligned strings, exit after counting a byte at a time
         | Exts.isTrue# (off# >=# end#)  = Exts.I# (len0# -# word2Int# nonStart#)
-        | Exts.isTrue# (andI# off# 0x07# ==# 0#) = 
-            vecFastLength (quotInt# off# 8#) nonStart#
+        -- search until we've found a Word aligned boundary
+        | Exts.isTrue# (andI# off# ALIGN_MASK ==# 0#) = 
+            vecFastLength (quotInt# off# WORDBYTES) nonStart#
         | otherwise = case indexWord8Array# ba off# of
-            b -> initFastLength (off# +# 1#)
+            b# -> initFastLength (off# +# 1#)
                     (plusWord# nonStart# (and# 
-                        (uncheckedShiftRL# b        7#) 
-                        (uncheckedShiftRL# (not# b) 6#)))
+                        (uncheckedShiftRL#       b#  7#) 
+                        (uncheckedShiftRL# (not# b#) 6#)))
 
-    -- process bytes 8 at a time, offset is in 64bit words, not bytes
+    -- process bytes WORDBYTES at a time, offset is in 64bit words, not bytes.
+    -- This counts the number of bytes in the word which match the pattern
+    -- 0b10xxxxxx
     vecFastLength :: Int# -> Word# -> Int
-    vecFastLength off64# nonStart# 
-        | Exts.isTrue# (off64# >=# endVec#) = endFastLength (off64# *# 8#) nonStart#
+    vecFastLength offWord# nonStart# 
+        | Exts.isTrue# (offWord# >=# endVec#) = 
+            endFastLength (offWord# *# WORDBYTES) nonStart#
         | otherwise = let
-                n#         = indexWord64Array# ba off64#
-                ones#     = quotWord# (minusWord# 0## 1##) 0xFF##
-                highOnes# = timesWord# ones# 0x80## 
-                u# = and# (uncheckedShiftRL# (and# n# highOnes#) 7#) 
-                          (uncheckedShiftRL# (not# n#)           6#)
-                in vecFastLength (off64# +# 1#)
-                    (plusWord# nonStart# 
-                        (uncheckedShiftRL# (timesWord# u# ones#) 56#))
+            n#        = READWORD ba offWord#
+            --           (-1) / 0xFF -> 0x01010101..
+            ones#     = quotWord# (int2Word# -1#) 0xFF##
+            --          0x80808080...
+            highOnes# = timesWord# ones# 0x80## 
+            u# = and#
+                (uncheckedShiftRL# (and# n# highOnes#) 7#) 
+                (uncheckedShiftRL# (not# n#)           6#)
+            in vecFastLength (offWord# +# 1#)
+                (plusWord# nonStart# 
+                    (uncheckedShiftRL# (timesWord# u# ones#) SUMSHIFT))
 
     -- clean up remaining data at end of buffer
     endFastLength :: Int# -> Word# -> Int
     endFastLength off# nonStart#
         | Exts.isTrue# (off# >=# end#) = Exts.I# (len0# -# word2Int# nonStart#)
         | otherwise = case indexWord8Array# ba off# of
-            b -> endFastLength (off# +# 1#)
+            b# -> endFastLength (off# +# 1#)
                     (plusWord# nonStart# (and# 
-                        (uncheckedShiftRL# b        7#) 
-                        (uncheckedShiftRL# (not# b) 6#)))
+                        (uncheckedShiftRL# b#        7#) 
+                        (uncheckedShiftRL# (not# b#) 6#)))
 
 
 -- | /O(n)/ Compare the count of characters in a 'Text' to a number.
