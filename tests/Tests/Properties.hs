@@ -332,12 +332,14 @@ t_toTitle_title t = all (<= 1) (caps w)
     where caps = fmap (T.length . T.filter isUpper) . T.words . T.toTitle
           -- TIL: there exist uppercase-only letters
           w = T.filter (\c -> if C.isUpper c then C.toLower c /= c else True) t
-t_toTitle_1stNotLower = and . notLow . T.toTitle . T.filter stable
+t_toTitle_1stNotLower = and . notLow . f . T.toTitle . T.filter stable
     where notLow = mapMaybe (fmap (not . isLower) . (T.find isLetter)) . T.words
           -- Surprise! The Spanish/Portuguese ordinal indicators changed
           -- from category Ll (letter, lowercase) to Lo (letter, other)
           -- in Unicode 7.0
           stable c = c /= '\170' && c /= '\186'
+          -- remove lowercase-only letters
+          f = T.filter (\c -> if C.isLower c then C.toUpper c /= c else True)
 
 justifyLeft k c xs  = xs ++ L.replicate (k - length xs) c
 justifyRight m n xs = L.replicate (m - length xs) n ++ xs
