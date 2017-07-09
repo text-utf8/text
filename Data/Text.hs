@@ -1643,7 +1643,7 @@ words t@(Text arr off len) = loop 0 0
                      else [Text arr (start+off) (n-start)]
         | isSpace c =
             if start == n
-            then loop (start+1) (start+1)
+            then loop (start+d) (start+d)
             else Text arr (start+off) (n-start) : loop (n+d) (n+d)
         | otherwise = loop start (n+d)
         where Iter c d = iter t n
