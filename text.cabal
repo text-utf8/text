@@ -79,6 +79,11 @@ flag integer-simple
   default: False
   manual: False
 
+flag vec-functions
+  description: Use SIMD (like) processing for length, take, drop etc.
+  default: False
+  manual: False
+
 library
   c-sources:    cbits/cbits.c
   include-dirs: include
@@ -157,6 +162,9 @@ library
   else
     cpp-options: -DINTEGER_GMP
     build-depends: integer-gmp >= 0.2
+  
+  if flag(vec-functions)
+    cpp-options: -DVECFUNCTIONS
 
 test-suite tests
   type:           exitcode-stdio-1.0

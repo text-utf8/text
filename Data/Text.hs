@@ -7,8 +7,10 @@
 {-# LANGUAGE TypeFamilies #-}
 #endif
 
+#ifdef VECFUNCTIONS
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
 #include "MachDeps.h"
+#endif
 #endif
 
 -- |
@@ -70,10 +72,6 @@ module Data.Text
     , init
     , null
     , length
-    , fastLength
-    , fastTake
-    , fastDrop
-    , fastSplitAt
     , compareLength
 
     -- * Transformations
@@ -255,7 +253,9 @@ import qualified GHC.Exts as Exts
 import Text.Printf (PrintfArg, formatArg, formatString)
 #endif
 
+#ifdef VECFUNCTIONS
 import GHC.Prim
+#endif
 
 -- $strict
 --
@@ -579,20 +579,8 @@ isSingleton :: Text -> Bool
 isSingleton = S.isSingleton . stream
 {-# INLINE isSingleton #-}
 
--- | /O(n)/ Returns the number of characters in a 'Text'.
--- Subject to fusion.
-length :: Text -> Int
-length t = S.length (stream t)
-{-# INLINE [0] length #-}
--- length needs to be phased after the compareN/length rules otherwise
--- it may inline before the rules have an opportunity to fire.
 
--- | /O(n)/ Uses a fast, SIMD like algorithm to compute how many codepoints
--- are present in a 'Text' value.
-
--- Based on the algorithm found at
--- http://www.daemonology.net/blog/2008-06-05-faster-utf8-strlen.html
-
+#ifdef VECFUNCTIONS
 #if WORD_SIZE_IN_BITS == 64
 #define READWORD   indexWord64Array#
 #define ALIGN_MASK 0x07#
@@ -630,6 +618,22 @@ countContBytes# n# = let
         (uncheckedShiftRL# (not# n#)           6#)
     in uncheckedShiftRL# (timesWord# u# ones#) SUMSHIFT
 
+#endif
+
+
+-- | /O(n)/ Returns the number of characters in a 'Text'.
+-- Subject to fusion.
+
+#ifndef VECFUNCTIONS
+
+length :: Text -> Int
+length t = S.length (stream t)
+{-# INLINE [0] length #-}
+-- length needs to be phased after the compareN/length rules otherwise
+-- it may inline before the rules have an opportunity to fire.
+
+#else
+
 -- | Counts the number of codepoints present in a given 'Text'. It uses a fast
 -- algorithm which avoids the need to decode every character.
 
@@ -637,8 +641,8 @@ countContBytes# n# = let
 -- http://www.daemonology.net/blog/2008-06-05-faster-utf8-strlen.html but should
 -- be slightly faster as there is no need to check for null bytes, so data
 -- dependent branches are eliminated.
-fastLength :: Text -> Int
-fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) =
+length :: Text -> Int
+length (Text arr (Exts.I# off0#) (Exts.I# len0#)) =
     initFastLength off0# 0## where
     ba = A.aBA arr
     end# = off0# +# len0#
@@ -681,11 +685,10 @@ fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) =
         | otherwise = endFastLength (off# +# 1#)
                         (plusWord# nonStart# (isContByte# (indexWord8Array# ba off#)))
 
-
 -- | Returns the length of the `Text` up to the given codepoint, or -1 if n is
 -- greater than the number of codepoints in the `Text`.
-fastNthCodepoint :: Int -> Text -> Int
-fastNthCodepoint (Exts.I# n0#) (Text arr (Exts.I# off0#) (Exts.I# len0#))
+nthCodepoint :: Int -> Text -> Int
+nthCodepoint (Exts.I# n0#) (Text arr (Exts.I# off0#) (Exts.I# len0#))
     -- if n > len there are definitely less than n characters
     | Exts.isTrue# (n0# >=# len0#) = -1
     | Exts.isTrue# (n0# <# 0#)     = 0
@@ -751,21 +754,7 @@ fastNthCodepoint (Exts.I# n0#) (Text arr (Exts.I# off0#) (Exts.I# len0#))
         | otherwise                       = Exts.I# off#
 
 
-
-fastDrop :: Int -> Text -> Text
-fastDrop n t@(Text arr off0 len0) = case fastNthCodepoint n t of
-    -1 -> empty
-    x -> Text arr (off0+x) (len0-x)
-
-fastTake :: Int -> Text -> Text
-fastTake n t@(Text arr off0 _len0) = case fastNthCodepoint n t of
-    -1 -> t
-    x -> Text arr off0 x
-
-fastSplitAt :: Int -> Text -> (Text, Text)
-fastSplitAt n t@(Text arr off0 len0) = case fastNthCodepoint n t of
-    -1 -> (t,empty)
-    x -> (Text arr off0 x, Text arr (off0+x) (len0-x))
+#endif
 
 -- | /O(n)/ Compare the count of characters in a 'Text' to a number.
 -- Subject to fusion.
@@ -1253,12 +1242,31 @@ unfoldrN n f s = unstream (S.unfoldrN n (firstf safe . f) s)
 -- | /O(n)/ 'take' @n@, applied to a 'Text', returns the prefix of the
 -- 'Text' of length @n@, or the 'Text' itself if @n@ is greater than
 -- the length of the Text. Subject to fusion.
+
+#ifndef VECFUNCTIONS
+
 take :: Int -> Text -> Text
 take n t@(Text arr off len)
     | n <= 0    = empty
     | n >= len  = t
     | otherwise = text arr off (iterN n t)
 {-# INLINE [1] take #-}
+
+{-# RULES
+"TEXT take -> fused" [~1] forall n t.
+    take n t = unstream (S.take n (stream t))
+"TEXT take -> unfused" [1] forall n t.
+    unstream (S.take n (stream t)) = take n t
+  #-}
+
+#else
+
+take :: Int -> Text -> Text
+take n t@(Text arr off0 _len0) = case nthCodepoint n t of
+    -1 -> t
+    x -> Text arr off0 x
+
+#endif
 
 iterN :: Int -> Text -> Int
 iterN n t@(Text _arr _off len) = loop 0 0
@@ -1267,12 +1275,6 @@ iterN n t@(Text _arr _off len) = loop 0 0
             | otherwise            = loop (i+d) (cnt+1)
           where d = iter_ t i
 
-{-# RULES
-"TEXT take -> fused" [~1] forall n t.
-    take n t = unstream (S.take n (stream t))
-"TEXT take -> unfused" [1] forall n t.
-    unstream (S.take n (stream t)) = take n t
-  #-}
 
 -- | /O(n)/ 'takeEnd' @n@ @t@ returns the suffix remaining after
 -- taking @n@ characters from the end of @t@.
@@ -1298,6 +1300,8 @@ iterNEnd n t@(Text _arr _off len) = loop (len-1) n
 -- | /O(n)/ 'drop' @n@, applied to a 'Text', returns the suffix of the
 -- 'Text' after the first @n@ characters, or the empty 'Text' if @n@
 -- is greater than the length of the 'Text'. Subject to fusion.
+#ifndef VECFUNCTIONS
+
 drop :: Int -> Text -> Text
 drop n t@(Text arr off len)
     | n <= 0    = t
@@ -1312,6 +1316,15 @@ drop n t@(Text arr off len)
 "TEXT drop -> unfused" [1] forall n t.
     unstream (S.drop n (stream t)) = drop n t
   #-}
+
+#else
+
+drop :: Int -> Text -> Text
+drop n t@(Text arr off0 len0) = case nthCodepoint n t of
+    -1 -> empty
+    x -> Text arr (off0+x) (len0-x)
+
+#endif
 
 -- | /O(n)/ 'dropEnd' @n@ @t@ returns the prefix remaining after
 -- dropping @n@ characters from the end of @t@.
@@ -1435,12 +1448,25 @@ strip = dropAround isSpace
 -- | /O(n)/ 'splitAt' @n t@ returns a pair whose first element is a
 -- prefix of @t@ of length @n@, and whose second is the remainder of
 -- the string. It is equivalent to @('take' n t, 'drop' n t)@.
+#ifndef VECFUNCTIONS
+
 splitAt :: Int -> Text -> (Text, Text)
 splitAt n t@(Text arr off len)
     | n <= 0    = (empty, t)
     | n >= len  = (t, empty)
     | otherwise = let k = iterN n t
                   in (text arr off k, text arr (off+k) (len-k))
+#else
+
+
+splitAt :: Int -> Text -> (Text, Text)
+splitAt n t@(Text arr off0 len0) = case nthCodepoint n t of
+    -1 -> (t,empty)
+    x -> (Text arr off0 x, Text arr (off0+x) (len0-x))
+
+
+#endif
+
 
 -- | /O(n)/ 'span', applied to a predicate @p@ and text @t@, returns
 -- a pair whose first element is the longest prefix (possibly empty)
