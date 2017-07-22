@@ -603,6 +603,24 @@ length t = S.length (stream t)
 #define SUMSHIFT   24#
 #endif
 
+isContByte# :: Word# -> Word#
+{-# INLINE isContByte# #-}
+isContByte# b# = 
+    and# 
+        (uncheckedShiftRL#       b#  7#) 
+        (uncheckedShiftRL# (not# b#) 6#)
+
+countContBytes# :: Word# -> Word#
+{-# INLINE countContBytes# #-}
+countContBytes# n# = let
+    ones#     = quotWord# (int2Word# -1#) 0xFF##
+    --          0x80808080...
+    highOnes# = timesWord# ones# 0x80## 
+    u# = and#
+        (uncheckedShiftRL# (and# n# highOnes#) 7#) 
+        (uncheckedShiftRL# (not# n#)           6#)
+    in uncheckedShiftRL# (timesWord# u# ones#) SUMSHIFT
+
 fastLength :: Text -> Int
 fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) = 
     initFastLength off0# 0## where
@@ -621,11 +639,8 @@ fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) =
         -- search until we've found a Word aligned boundary
         | Exts.isTrue# (andI# off# ALIGN_MASK ==# 0#) = 
             vecFastLength (quotInt# off# WORDBYTES) nonStart#
-        | otherwise = case indexWord8Array# ba off# of
-            b# -> initFastLength (off# +# 1#)
-                    (plusWord# nonStart# (and# 
-                        (uncheckedShiftRL#       b#  7#) 
-                        (uncheckedShiftRL# (not# b#) 6#)))
+        | otherwise = initFastLength (off# +# 1#)
+                        (plusWord# nonStart# (isContByte# (indexWord8Array# ba off#)))
 
     -- process bytes WORDBYTES at a time, offset is in 64bit words, not bytes.
     -- This counts the number of bytes in the word which match the pattern
@@ -634,23 +649,17 @@ fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) =
     vecFastLength offWord# nonStart# 
         | Exts.isTrue# (offWord# >=# endVec#) = 
             endFastLength (offWord# *# WORDBYTES) nonStart#
-        | otherwise = let
-            n#        = READWORD ba offWord#
-            --           (-1) / 0xFF -> 0x01010101..
-            ones#     = quotWord# (int2Word# -1#) 0xFF##
-            --          0x80808080...
-            highOnes# = timesWord# ones# 0x80## 
-            u# = and#
-                (uncheckedShiftRL# (and# n# highOnes#) 7#) 
-                (uncheckedShiftRL# (not# n#)           6#)
-            in vecFastLength (offWord# +# 1#)
-                (plusWord# nonStart# 
-                    (uncheckedShiftRL# (timesWord# u# ones#) SUMSHIFT))
+        | otherwise = vecFastLength 
+                (offWord# +# 1#)
+                (plusWord# nonStart# (countContBytes# (READWORD ba offWord#)))
 
     -- clean up remaining data at end of buffer
     endFastLength :: Int# -> Word# -> Int
     endFastLength off# nonStart#
         | Exts.isTrue# (off# >=# end#) = Exts.I# (len0# -# word2Int# nonStart#)
+        | otherwise = endFastLength (off# +# 1#)
+                        (plusWord# nonStart# (isContByte# (indexWord8Array# ba off#)))
+
         | otherwise = case indexWord8Array# ba off# of
             b# -> endFastLength (off# +# 1#)
                     (plusWord# nonStart# (and# 
