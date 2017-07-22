@@ -71,6 +71,9 @@ module Data.Text
     , null
     , length
     , fastLength
+    , fastTake
+    , fastDrop
+    , fastSplitAt
     , compareLength
 
     -- * Transformations
@@ -252,7 +255,7 @@ import qualified GHC.Exts as Exts
 import Text.Printf (PrintfArg, formatArg, formatString)
 #endif
 
-import GHC.Prim 
+import GHC.Prim
 
 -- $strict
 --
@@ -594,35 +597,48 @@ length t = S.length (stream t)
 #define READWORD   indexWord64Array#
 #define ALIGN_MASK 0x07#
 #define WORDBYTES  8#
+#define WORDBYTESW (int2Word# 8#)
 #define SUMSHIFT   56#
 -- SUMSHIFT = (sizeof(Word#)-1) * 8
 #else
 #define READWORD   indexWord32Array#
 #define ALIGN_MASK 0x03#
 #define WORDBYTES  4#
+#define WORDBYTESW (int2Word# 4#)
 #define SUMSHIFT   24#
 #endif
 
+-- Returns 1 if the given byte is a continuation byte (0b10xxxxxx), assumes
+-- value is between 0 and 255
 isContByte# :: Word# -> Word#
 {-# INLINE isContByte# #-}
-isContByte# b# = 
-    and# 
-        (uncheckedShiftRL#       b#  7#) 
+isContByte# b# =
+    and#
+        (uncheckedShiftRL#       b#  7#)
         (uncheckedShiftRL# (not# b#) 6#)
 
+-- Counts the number of continuation bytes (0x10xxxxxx) contained in a given
+-- `Word#`.
 countContBytes# :: Word# -> Word#
 {-# INLINE countContBytes# #-}
 countContBytes# n# = let
     ones#     = quotWord# (int2Word# -1#) 0xFF##
     --          0x80808080...
-    highOnes# = timesWord# ones# 0x80## 
+    highOnes# = timesWord# ones# 0x80##
     u# = and#
-        (uncheckedShiftRL# (and# n# highOnes#) 7#) 
+        (uncheckedShiftRL# (and# n# highOnes#) 7#)
         (uncheckedShiftRL# (not# n#)           6#)
     in uncheckedShiftRL# (timesWord# u# ones#) SUMSHIFT
 
+-- | Counts the number of codepoints present in a given 'Text'. It uses a fast
+-- algorithm which avoids the need to decode every character.
+
+-- It uses the algorithm found at
+-- http://www.daemonology.net/blog/2008-06-05-faster-utf8-strlen.html but should
+-- be slightly faster as there is no need to check for null bytes, so data
+-- dependent branches are eliminated.
 fastLength :: Text -> Int
-fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) = 
+fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) =
     initFastLength off0# 0## where
     ba = A.aBA arr
     end# = off0# +# len0#
@@ -632,24 +648,29 @@ fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) =
     -- 0b10xxxxxx) and subtracting that from the number of bytes in the Text -
     -- all other bytes must have been codepoint starting bytes if it is valid
     -- utf-8.
+    --
+    -- Parameters are the offset into the buffer and the number of continuation
+    -- bytes seen so far.
     initFastLength :: Int# -> Word# -> Int
     initFastLength off# nonStart#
         -- For short, unaligned strings, exit after counting a byte at a time
         | Exts.isTrue# (off# >=# end#)  = Exts.I# (len0# -# word2Int# nonStart#)
         -- search until we've found a Word aligned boundary
-        | Exts.isTrue# (andI# off# ALIGN_MASK ==# 0#) = 
+        | Exts.isTrue# (andI# off# ALIGN_MASK ==# 0#) =
             vecFastLength (quotInt# off# WORDBYTES) nonStart#
         | otherwise = initFastLength (off# +# 1#)
                         (plusWord# nonStart# (isContByte# (indexWord8Array# ba off#)))
 
-    -- process bytes WORDBYTES at a time, offset is in 64bit words, not bytes.
-    -- This counts the number of bytes in the word which match the pattern
-    -- 0b10xxxxxx
+    -- process bytes WORDBYTES at a time, offset is in words, not bytes. This
+    -- counts the number of bytes in the word which match the pattern
+    -- 0b10xxxxxx, i.e. continuation bytes.
+    --
+    -- TODO: unroll this to process several Words at a time.
     vecFastLength :: Int# -> Word# -> Int
-    vecFastLength offWord# nonStart# 
-        | Exts.isTrue# (offWord# >=# endVec#) = 
+    vecFastLength offWord# nonStart#
+        | Exts.isTrue# (offWord# >=# endVec#) =
             endFastLength (offWord# *# WORDBYTES) nonStart#
-        | otherwise = vecFastLength 
+        | otherwise = vecFastLength
                 (offWord# +# 1#)
                 (plusWord# nonStart# (countContBytes# (READWORD ba offWord#)))
 
@@ -660,12 +681,91 @@ fastLength (Text arr (Exts.I# off0#) (Exts.I# len0#)) =
         | otherwise = endFastLength (off# +# 1#)
                         (plusWord# nonStart# (isContByte# (indexWord8Array# ba off#)))
 
-        | otherwise = case indexWord8Array# ba off# of
-            b# -> endFastLength (off# +# 1#)
-                    (plusWord# nonStart# (and# 
-                        (uncheckedShiftRL# b#        7#) 
-                        (uncheckedShiftRL# (not# b#) 6#)))
 
+-- | Returns the length of the `Text` up to the given codepoint, or -1 if n is
+-- greater than the number of codepoints in the `Text`.
+fastNthCodepoint :: Int -> Text -> Int
+fastNthCodepoint (Exts.I# n0#) (Text arr (Exts.I# off0#) (Exts.I# len0#))
+    -- if n > len there are definitely less than n characters
+    | Exts.isTrue# (n0# >=# len0#) = -1
+    | Exts.isTrue# (n0# <# 0#)     = 0
+    | otherwise = initFastNth off0# (int2Word# n0#) where
+    ba = A.aBA arr
+    end# = off0# +# len0#
+    endVec# = quotInt# end# WORDBYTES
+
+    initFastNth :: Int# -> Word# -> Int
+    initFastNth off# n#
+        | Exts.isTrue# (off# >=# end#)    = -1
+        -- If n less than bytes/word, clean up in the epilogue loop
+        | Exts.isTrue# (n# `leWord#` WORDBYTESW) = endFastNth off# n#
+        -- If word aligned, process in the fast loop
+        | Exts.isTrue# (andI# off# ALIGN_MASK ==# 0#) =
+            -- endFastNth off# n#
+            vecFastNth (quotInt# off# WORDBYTES) n#
+        | otherwise = case indexWord8Array# ba off# of
+            -- isContByte b     = 1|0
+            -- isContByte b - 1 = 0|-1
+            -- therefore, we only subtract 1 from n if it is not a continuation byte
+            b# -> initFastNth (off# +# 1#) (plusWord# n# (minusWord# (isContByte# b#) 1##))
+    
+    -- Count down n one word at a time. Offset is in Word#'s not bytes
+    vecFastNth :: Int# -> Word# -> Int
+    vecFastNth offWord# n#
+        -- Check for end of array, or if there are less than #bytes/word left
+        -- left to find and let endFastNth take care of any cleanup.
+        | Exts.isTrue# ((offWord# >=# endVec#) `orI#` leWord# n# WORDBYTESW) =
+            endFastNth (offWord# *# WORDBYTES) n#
+        | otherwise = vecFastNth
+                (offWord# +# 1#)
+                -- Subtract #bytes/word, add the number of non codepoint start
+                -- chars
+                (plusWord#
+                    (minusWord# n# WORDBYTESW)
+                    (countContBytes# (READWORD ba offWord#)))
+
+    endFastNth :: Int# -> Word# -> Int
+    endFastNth off# n#
+        -- overrun
+        | Exts.isTrue# (off# >=# end#)    = -1
+        -- still more characters to find
+        | Exts.isTrue# (n# `gtWord#` 0##) = let
+            b# = indexWord8Array# ba off#
+            -- isContByte b     = 1|0
+            -- isContByte b - 1 = 0|-1
+            -- therefore, we only subtract 1 from n if it is not a continuation byte
+            in endFastNth (off# +# 1#) (plusWord# n# (minusWord# (isContByte# b#) 1##))
+        -- n == 0
+        | otherwise = cleanEnd off#
+    
+    -- Cleans up the final character, finds the offset to the next
+    -- non-continuation byte
+    cleanEnd :: Int# -> Int
+    cleanEnd off#
+        -- overrun
+        | Exts.isTrue# (off# >=# end#)    = -1
+        -- if it's a continuation byte, search again
+        | Exts.isTrue# (word2Int# (isContByte# (indexWord8Array# ba off#)))
+            = cleanEnd (off# +# 1#)
+        -- If this is not a contiunuation byte, the previous byte is the last one
+        | otherwise                       = Exts.I# off#
+
+
+
+fastDrop :: Int -> Text -> Text
+fastDrop n t@(Text arr off0 len0) = case fastNthCodepoint n t of
+    -1 -> empty
+    x -> Text arr (off0+x) (len0-x)
+
+fastTake :: Int -> Text -> Text
+fastTake n t@(Text arr off0 _len0) = case fastNthCodepoint n t of
+    -1 -> t
+    x -> Text arr off0 x
+
+fastSplitAt :: Int -> Text -> (Text, Text)
+fastSplitAt n t@(Text arr off0 len0) = case fastNthCodepoint n t of
+    -1 -> (t,empty)
+    x -> (Text arr off0 x, Text arr (off0+x) (len0-x))
 
 -- | /O(n)/ Compare the count of characters in a 'Text' to a number.
 -- Subject to fusion.
