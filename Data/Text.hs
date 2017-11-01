@@ -229,7 +229,7 @@ import Data.Text.Show (singleton, unpack, unpackCString#)
 import qualified Prelude as P
 import Data.Text.Unsafe (Iter(..), iter, iter_, lengthWord8, reverseIter,
                          reverseIter_, unsafeHead, unsafeTail, takeWord8)
-import Data.Text.Internal.Unsafe.Char (unsafeChr)
+import Data.Text.Internal.Unsafe.Char (unsafeChr, unsafeWrite)
 import qualified Data.Text.Internal.Functions as F
 import qualified Data.Text.Internal.Encoding.Utf8 as U8
 import qualified Data.Text.Internal.Encoding.Utf16 as U16
@@ -647,8 +647,20 @@ intersperse c t = unstream (S.intersperse (safe c) (stream t))
 
 -- | /O(n)/ Reverse the characters of a string. Subject to fusion.
 reverse :: Text -> Text
-reverse t = S.reverse (stream t)
-{-# INLINE reverse #-}
+reverse (Text arr off len) = Text (A.run go) 0 len
+  where
+  go :: forall s. ST s (A.MArray s)
+  go = do
+    marr <- A.new len
+    let
+      e = off + len
+      loop i j =
+        if i >= e then return marr
+        else do
+          _ <- unsafeWrite marr (j - d) c
+          loop (i + d) (j - d)
+        where Iter c d = U8.decodeCharIndex Iter (A.unsafeIndex arr) i
+    loop off len
 
 -- | /O(m+n)/ Replace every non-overlapping occurrence of @needle@ in
 -- @haystack@ with @replacement@.
