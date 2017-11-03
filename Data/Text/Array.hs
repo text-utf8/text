@@ -36,6 +36,7 @@ module Data.Text.Array
 
     , empty
     , equal
+    , compare
 #if defined(ASSERTS)
     , length
 #endif
@@ -88,7 +89,7 @@ import GHC.Base (IO(..), RealWorld, ByteArray#, MutableByteArray#, Int(..), (-#)
 import GHC.Exts (Ptr(..))
 import GHC.ST (ST(..), runST)
 import GHC.Word (Word8(..), Word32(..), Word64(..))
-import Prelude hiding (length, read)
+import Prelude hiding (length, read, compare)
 
 -- | Immutable array type.
 data Array = Array {
@@ -278,6 +279,22 @@ equal arrA offA arrB offB count = inlinePerformIO $ do
                      (aBA arrB) (fromIntegral offB) (fromIntegral count)
   return $! i == 0
 {-# INLINE equal #-}
+
+-- | Compare portions of two arrays for equality.  No bounds checking
+-- is performed.
+compare :: Array                  -- ^ First
+        -> Int                    -- ^ Offset into first
+        -> Array                  -- ^ Second
+        -> Int                    -- ^ Offset into second
+        -> Int                    -- ^ Count
+        -> Ordering
+compare arrA offA arrB offB count = inlinePerformIO $ do
+  i <- memcmp (aBA arrA) (fromIntegral offA)
+                     (aBA arrB) (fromIntegral offB) (fromIntegral count)
+  if i == 0 then return EQ
+    else if i > 0 then return GT
+    else return LT
+{-# INLINE compare #-}
 
 foreign import ccall unsafe "_hs_text_memcmp" memcmp
     :: ByteArray# -> CSize -> ByteArray# -> CSize -> CSize -> IO CInt
