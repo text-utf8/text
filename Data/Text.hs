@@ -229,11 +229,14 @@ import Data.Text.Show (singleton, unpack, unpackCString#)
 import qualified Prelude as P
 import Data.Text.Unsafe (Iter(..), iter, iter_, lengthWord8, reverseIter,
                          reverseIter_, unsafeHead, unsafeTail, takeWord8)
-import Data.Text.Internal.Unsafe.Char (unsafeChr)
+import Data.Text.Internal.Unsafe.Char (unsafeChr, unsafeWrite)
 import qualified Data.Text.Internal.Functions as F
 import qualified Data.Text.Internal.Encoding.Utf8 as U8
 import qualified Data.Text.Internal.Encoding.Utf16 as U16
 import Data.Text.Internal.Search (indices)
+import Data.Word (byteSwap64)
+import Data.Text.Internal.Unsafe.Shift (UnsafeShift(..))
+import Data.Bits hiding (shiftL, shiftR)
 #if defined(__HADDOCK__)
 import Data.ByteString (ByteString)
 import qualified Data.Text.Lazy as L
@@ -640,8 +643,63 @@ intersperse c t = unstream (S.intersperse (safe c) (stream t))
 
 -- | /O(n)/ Reverse the characters of a string. Subject to fusion.
 reverse :: Text -> Text
-reverse t = S.reverse (stream t)
-{-# INLINE reverse #-}
+reverse (Text arr off len) = Text (A.run go) 0 len
+  where
+  allSingleByte x = x .&. 0x8080808080808080 == 0
+  go :: forall s. ST s (A.MArray s)
+  go = do
+    marr <- A.new len
+    let
+      e = off + len
+      e64 = e `shiftR` 3
+      loop i j = 
+        let i64 = i `shiftR` 3
+            j64 = j `shiftR` 3
+            x = A.unsafeIndex64 arr i64
+            r = byteSwap64 x
+        in
+        if i >= e then return marr
+        else if i .&. 0x7 == 0 && i64 < e64 && allSingleByte x then
+          let a = j .&. 0x7
+              k = 8 - a
+              sa = a `shiftL` 3
+              sk = k `shiftL` 3
+              alignJ j r =
+                if j .&. 0x7 == 0 then
+                  fastLoop (i64 + 1) (j `shiftR` 3) r
+                else do
+                  A.unsafeWrite marr (j - 1) (P.fromIntegral $ r .&. 0xff)
+                  alignJ (j - 1) (r `shiftR` 8)
+              fastAlignedLoop i64 j64 =
+                let x = A.unsafeIndex64 arr i64
+                    r = byteSwap64 x
+                in if i64 < e64 && allSingleByte x then do
+                  A.unsafeWrite64 marr (j64 - 1) r
+                  fastAlignedLoop (i64 + 1) (j64 - 1)
+                else loop (i64 `shiftL` 3) (j64 `shiftL` 3)
+              fastLoop i64 j64 rest =
+                let x = A.unsafeIndex64 arr i64
+                in if i64 < e64 && allSingleByte x then do
+                  A.unsafeWrite64 marr (j64 - 1) (byteSwap64 $ rest .|. (x `shiftL` sk))
+                  fastLoop (i64 + 1) (j64 - 1) (x `shiftR` sa)
+                else
+                  let writeRest j r =
+                        if j .&. 0x7 == a then
+                          loop (i64 `shiftL` 3) j
+                        else do
+                          A.unsafeWrite marr (j - 1) (P.fromIntegral $ r .&. 0xff)
+                          writeRest (j - 1) (r `shiftR` 8)
+                  in writeRest (j64 `shiftL` 3) rest
+          in if j .&. 0x7 == 0 then do
+               let j64 = j `shiftR` 3
+               A.unsafeWrite64 marr (j64 - 1) r
+               fastAlignedLoop (i64 + 1) (j64 - 1)
+             else alignJ j x  -- if LITTLE endian
+        else do
+          _ <- unsafeWrite marr (j - d) c
+          loop (i + d) (j - d)
+        where Iter c d = U8.decodeCharIndex Iter (A.unsafeIndex arr) i
+    loop off len
 
 -- | /O(m+n)/ Replace every non-overlapping occurrence of @needle@ in
 -- @haystack@ with @replacement@.
