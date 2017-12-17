@@ -555,6 +555,8 @@ init t@(Text arr off len)
 
 -- | /O(1)/ Returns all but the last character and the last character of a
 -- 'Text', or 'Nothing' if empty.
+--
+-- @since 1.2.3.0
 unsnoc :: Text -> Maybe (Text, Char)
 unsnoc t@(Text _ _ len)
     | len <= 0                 = Nothing
