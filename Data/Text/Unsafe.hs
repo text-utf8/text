@@ -87,6 +87,8 @@ reverseIter (Text arr off _len) i =
 -- | /O(1)/ Iterate one step backwards through a UTF-8 array,
 -- returning the delta to add (i.e. a negative number) to give the
 -- next offset to iterate at.
+--
+-- @since 1.1.1.0
 reverseIter_ :: Text -> Int -> Int
 reverseIter_ (Text arr off _len) i =
   reverseDecodeCharIndex (\_ n -> -n) (\x -> A.unsafeIndex arr (x + off)) i

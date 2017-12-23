@@ -92,6 +92,8 @@ import GHC.Word (Word8(..), Word32(..), Word64(..))
 import Prelude hiding (length, read)
 
 -- | Immutable array type.
+--
+-- The 'Array' constructor is exposed since @text-1.1.1.3@
 data Array = Array {
       aBA :: ByteArray#
 #if defined(ASSERTS)
@@ -100,6 +102,8 @@ data Array = Array {
     }
 
 -- | Mutable array type, for use in the ST monad.
+--
+-- The 'MArray' constructor is exposed since @text-1.1.1.3@
 data MArray s = MArray {
       maBA :: MutableByteArray# s
 #if defined(ASSERTS)

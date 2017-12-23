@@ -1109,6 +1109,8 @@ iterN n t@(Text _arr _off len) = loop 0 0
 -- Examples:
 --
 -- > takeEnd 3 "foobar" == "bar"
+--
+-- @since 1.1.1.0
 takeEnd :: Int -> Text -> Text
 takeEnd n t@(Text arr off len)
     | n <= 0    = empty
@@ -1148,6 +1150,8 @@ drop n t@(Text arr off len)
 -- Examples:
 --
 -- > dropEnd 3 "foobar" == "foo"
+--
+-- @since 1.1.1.0
 dropEnd :: Int -> Text -> Text
 dropEnd n t@(Text arr off len)
     | n <= 0    = t
