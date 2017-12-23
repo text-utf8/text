@@ -201,6 +201,8 @@ decodeUtf8With onErr s@(PS fp off len) = runST $ do
 -- or continuation where it is encountered.
 
 -- | A stream oriented decoding result.
+--
+-- @since 1.0.0.0
 data Decoding = Some Text ByteString (ByteString -> Decoding)
 
 instance Show Decoding where
@@ -220,11 +222,15 @@ newtype DecoderState = DecoderState Word32 deriving (Eq, Show, Num, Storable)
 -- thrown (either by this function or a continuation) that cannot be
 -- caught in pure code.  For more control over the handling of invalid
 -- data, use 'streamDecodeUtf8With'.
+--
+-- @since 1.0.0.0
 streamDecodeUtf8 :: ByteString -> Decoding
 streamDecodeUtf8 = streamDecodeUtf8With strictDecode
 
 -- | Decode, in a stream oriented way, a 'ByteString' containing UTF-8
 -- encoded text.
+--
+-- @since 1.0.0.0
 streamDecodeUtf8With :: OnDecodeError -> ByteString -> Decoding
 streamDecodeUtf8With onErr = decodeChunk B.empty 0 0
  where
