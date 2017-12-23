@@ -306,6 +306,8 @@ decodeUtf8' = unsafeDupablePerformIO . try . evaluate . decodeUtf8With strictDec
 {-# INLINE decodeUtf8' #-}
 
 -- | Encode text to a ByteString 'B.Builder' using UTF-8 encoding.
+--
+-- @since 1.1.0.0
 encodeUtf8Builder :: Text -> B.Builder
 encodeUtf8Builder = \t -> B.builder (textCopyStep t)
 {-# INLINE encodeUtf8Builder #-}
@@ -332,6 +334,8 @@ textCopyStep !(Text arr off len) k = go 0 len
 --
 -- Use this function is to implement efficient encoders for text-based formats
 -- like JSON or HTML.
+--
+-- @since 1.1.0.0
 {-# INLINE encodeUtf8BuilderEscaped #-}
 -- TODO: Extend documentation with references to source code in @blaze-html@
 -- or @aeson@ that uses this function.
