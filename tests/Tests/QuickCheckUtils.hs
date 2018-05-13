@@ -2,8 +2,16 @@
 -- instances, and comparison functions, so we can focus on the actual properties
 -- in the 'Tests.Properties' module.
 --
-{-# LANGUAGE CPP, FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+
+-- workaround panic in GHC 8.4.2
+#if __GLASGOW_HASKELL__ == 804
+{-# OPTIONS_GHC -O0 #-}
+#endif
+
 module Tests.QuickCheckUtils
     (
       genUnicode
