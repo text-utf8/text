@@ -1,4 +1,6 @@
-{-# LANGUAGE CPP, MagicHash, UnboxedTuples #-}
+{-# LANGUAGE CPP           #-}
+{-# LANGUAGE MagicHash     #-}
+{-# LANGUAGE UnboxedTuples #-}
 -- |
 -- Module      : Data.Text.Unsafe
 -- Copyright   : (c) 2009, 2010, 2011 Bryan O'Sullivan
@@ -26,15 +28,15 @@ module Data.Text.Unsafe
     ) where
 
 #if defined(ASSERTS)
-import Control.Exception (assert)
+import           Control.Exception                (assert)
 #endif
-import Data.Text.Internal.Encoding.Utf8 (decodeCharIndex, reverseDecodeCharIndex)
-import Data.Text.Internal.Encoding.Utf16 (chr2)
-import Data.Text.Internal (Text(..))
-import Data.Text.Internal.Unsafe (inlineInterleaveST, inlinePerformIO)
-import Data.Text.Internal.Unsafe.Char (unsafeChr)
-import qualified Data.Text.Array as A
-import GHC.IO (unsafeDupablePerformIO)
+import qualified Data.Text.Array                  as A
+import           Data.Text.Internal               (Text (..))
+import           Data.Text.Internal.Encoding.Utf8 (decodeCharIndex,
+                                                   reverseDecodeCharIndex)
+import           Data.Text.Internal.Unsafe        (inlineInterleaveST,
+                                                   inlinePerformIO)
+import           GHC.IO                           (unsafeDupablePerformIO)
 
 -- | /O(1)/ A variant of 'head' for non-empty 'Text'. 'unsafeHead'
 -- omits the check for the empty case, so there is an obligation on

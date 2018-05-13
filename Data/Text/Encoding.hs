@@ -67,19 +67,16 @@ import Control.Monad.ST (unsafeIOToST, unsafeSTToIO)
 
 import Control.Exception (evaluate, try)
 import Control.Monad.ST (runST)
-import Data.Bits ((.&.))
 import Data.ByteString as B
 import Data.ByteString.Internal as B hiding (c2w)
 import Data.Text.Encoding.Error (OnDecodeError, UnicodeException, strictDecode)
 import Data.Text.Internal (Text(..), safe, text)
-import Data.Text.Internal.Private (runText)
-import Data.Text.Internal.Unsafe.Char (ord, unsafeWrite)
-import Data.Text.Internal.Unsafe.Shift (shiftR)
+import Data.Text.Internal.Unsafe.Char (unsafeWrite)
 import Data.Text.Show ()
 import Data.Text.Unsafe (unsafeDupablePerformIO)
 import Data.Word (Word8, Word32)
 #if __GLASGOW_HASKELL__ >= 703
-import Foreign.C.Types (CSize(CSize))
+import Foreign.C.Types (CSize)
 #else
 import Foreign.C.Types (CSize)
 #endif
@@ -87,14 +84,13 @@ import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr, minusPtr, nullPtr, plusPtr)
 import Foreign.Storable (Storable, peek, poke)
-import GHC.Base (ByteArray#, MutableByteArray#)
+import GHC.Base (MutableByteArray#)
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Builder.Internal as B hiding (empty, append)
 import qualified Data.ByteString.Builder.Prim as BP
 import qualified Data.ByteString.Builder.Prim.Internal as BP
 import qualified Data.Text.Array as A
 import qualified Data.Text.Internal.Encoding.Fusion as E
-import qualified Data.Text.Internal.Encoding.Utf16 as U16
 import qualified Data.Text.Internal.Fusion as F
 
 #include "text_cbits.h"
@@ -142,8 +138,6 @@ decodeUtf8With onErr s@(PS fp off len) = runST $ do
             return (Text dest' 0 (fromIntegral n))
           else do
             return (F.unstream (E.streamUtf8 onErr s))
- where
-  desc = "Data.Text.Internal.Encoding.decodeUtf8: Invalid UTF-8 stream"
 {- INLINE[0] decodeUtf8With #-}
 
 -- $stream
@@ -363,8 +357,8 @@ encodeUtf8BuilderEscaped be =
             goPartial !iendTmp = go i0 op0
               where
                 go !i !op
-                  | i < iendTmp = case a of
-                      a | a <= 0x7F ->
+                  | i < iendTmp = case () of
+                      _ | a <= 0x7F ->
                             BP.runB be (fromIntegral a) op >>= go (i + 1)
                         | 0xC2 <= a && a <= 0xDF -> do
                             poke8 0 a

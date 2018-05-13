@@ -66,21 +66,16 @@ if (_k_) < 0 || (_k_) >= (_len_) then error ("Data.Text.Array." ++ (_func_) ++ "
 #if defined(ASSERTS)
 import Control.Exception (assert)
 #endif
-#if __GLASGOW_HASKELL__ >= 702
-import Control.Monad.ST.Unsafe (unsafeIOToST)
-#else
-import Control.Monad.ST (unsafeIOToST)
-#endif
 import Data.Bits ((.&.), xor)
 import Data.Text.Internal.Unsafe (inlinePerformIO)
-import Data.Text.Internal.Unsafe.Shift (shiftL, shiftR)
+import Data.Text.Internal.Unsafe.Shift (shiftR)
 import Foreign.Ptr (Ptr)
 #if __GLASGOW_HASKELL__ >= 703
 import Foreign.C.Types (CInt(CInt), CSize(CSize))
 #else
 import Foreign.C.Types (CInt, CSize)
 #endif
-import GHC.Base (IO(..), RealWorld, ByteArray#, MutableByteArray#, Int(..), (-#),
+import GHC.Base (IO(..), ByteArray#, MutableByteArray#, Int(..), (-#),
                  indexWord8Array#, indexWord32Array#, indexWord64Array#, newByteArray#, plusAddr#,
                  unsafeFreezeByteArray#, writeWord8Array#, writeWord32Array#, writeWord64Array#,
                  copyByteArray#, copyMutableByteArray#, copyByteArrayToAddr#,

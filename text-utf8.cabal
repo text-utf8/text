@@ -101,6 +101,7 @@ flag integer-simple
 library
   c-sources:    cbits/cbits.c
   include-dirs: include
+  default-language: Haskell2010
 
   exposed-modules:
     Data.Text
@@ -176,6 +177,8 @@ test-suite tests
   type:           exitcode-stdio-1.0
   c-sources:      cbits/cbits.c
   include-dirs:   include
+  default-language: Haskell2010
+  default-extensions: NondecreasingIndentation
 
   ghc-options:
     -Wall -threaded -rtsopts

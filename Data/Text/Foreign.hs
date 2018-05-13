@@ -34,11 +34,6 @@ module Data.Text.Foreign
 #if defined(ASSERTS)
 import Control.Exception (assert)
 #endif
-#if __GLASGOW_HASKELL__ >= 702
-import Control.Monad.ST.Unsafe (unsafeIOToST)
-#else
-import Control.Monad.ST (unsafeIOToST)
-#endif
 import qualified Data.Text.Internal.Encoding.Utf8 as U8
 import Data.ByteString.Unsafe (unsafePackCStringLen, unsafeUseAsCStringLen)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -49,8 +44,7 @@ import Data.Word (Word8)
 import Foreign.C.String (CStringLen)
 import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrArray, withForeignPtr)
 import Foreign.Marshal.Alloc (allocaBytes)
-import Foreign.Ptr (Ptr, castPtr, plusPtr)
-import Foreign.Storable (peek, poke)
+import Foreign.Ptr (Ptr, castPtr)
 import qualified Data.Text.Array as A
 
 -- $interop
