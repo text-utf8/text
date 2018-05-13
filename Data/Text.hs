@@ -234,10 +234,8 @@ import Data.Text.Show (singleton, unpack, unpackCString#)
 import qualified Prelude as P
 import Data.Text.Unsafe (Iter(..), iter, iter_, lengthWord8, reverseIter,
                          reverseIter_, unsafeHead, unsafeTail, takeWord8)
-import Data.Text.Internal.Unsafe.Char (unsafeChr)
 import qualified Data.Text.Internal.Functions as F
 import qualified Data.Text.Internal.Encoding.Utf8 as U8
-import qualified Data.Text.Internal.Encoding.Utf16 as U16
 import Data.Text.Internal.Search (indices)
 #if defined(__HADDOCK__)
 import Data.ByteString (ByteString)
@@ -558,12 +556,9 @@ init t@(Text arr off len)
 -- | /O(1)/ Returns all but the last character and the last character of a
 -- 'Text', or 'Nothing' if empty.
 unsnoc :: Text -> Maybe (Text, Char)
-unsnoc (Text arr off len)
+unsnoc t@(Text _ _ len)
     | len <= 0                 = Nothing
-    | n < 0xDC00 || n > 0xDFFF = Just (text arr off (len-1), unsafeChr n)
-    | otherwise                = Just (text arr off (len-2), U16.chr2 n0 n)
-    where n  = A.unsafeIndex arr (off+len-1)
-          n0 = A.unsafeIndex arr (off+len-2)
+    | otherwise                = Just (init t, last t) -- TODO
 {-# INLINE [1] unsnoc #-}
 
 -- | /O(1)/ Tests whether a 'Text' is empty or not.  Subject to
