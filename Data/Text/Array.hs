@@ -67,12 +67,15 @@ if (_k_) < 0 || (_k_) >= (_len_) then error ("Data.Text.Array." ++ (_func_) ++ "
 import Control.Exception (assert)
 #endif
 import Data.Bits ((.&.), xor)
-import Data.Text.Internal.Unsafe (inlinePerformIO)
 import Data.Text.Internal.Unsafe.Shift (shiftR)
 import Foreign.Ptr (Ptr)
-#if __GLASGOW_HASKELL__ >= 703
+#if __GLASGOW_HASKELL__ >= 804
+import GHC.Exts (compareByteArrays#)
+#elif __GLASGOW_HASKELL__ >= 703
+import Data.Text.Internal.Unsafe (inlinePerformIO)
 import Foreign.C.Types (CInt(CInt), CSize(CSize))
 #else
+import Data.Text.Internal.Unsafe (inlinePerformIO)
 import Foreign.C.Types (CInt, CSize)
 #endif
 import GHC.Base (IO(..), ByteArray#, MutableByteArray#, Int(..), (-#),
@@ -283,14 +286,19 @@ cmp :: Array                  -- ^ First
     -> Int                    -- ^ Offset into second
     -> Int                    -- ^ Count
     -> Ordering
+#if __GLASGOW_HASKELL__ >= 804
+cmp arrA (I# offA) arrB (I# offB) (I# count) =
+  compare (I# (compareByteArrays# (aBA arrA) offA (aBA arrB) offB count)) 0
+#else
 cmp arrA offA arrB offB count = inlinePerformIO $ do
   i <- memcmp (aBA arrA) (fromIntegral offA)
-                     (aBA arrB) (fromIntegral offB) (fromIntegral count)
+              (aBA arrB) (fromIntegral offB) (fromIntegral count)
   return $ compare i 0
 {-# INLINE cmp #-}
 
 foreign import ccall unsafe "_hs_text_utf_8_memcmp" memcmp
     :: ByteArray# -> CSize -> ByteArray# -> CSize -> CSize -> IO CInt
+#endif
 
 -- | Copy some elements of an immutable array to a pointer
 copyToPtr :: Ptr Word8               -- ^ Destination
