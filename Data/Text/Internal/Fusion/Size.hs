@@ -43,7 +43,7 @@ import Data.Text.Internal (mul)
 import Control.Exception (assert)
 #endif
 
--- | A size in UTF-16 code units.
+-- | A size in UTF-8 code units.
 data Size = Between {-# UNPACK #-} !Int {-# UNPACK #-} !Int -- ^ Lower and upper bounds on size.
           | Unknown                                         -- ^ Unknown size.
             deriving (Eq, Show)
@@ -56,12 +56,16 @@ exactly _ = Nothing
 -- | The 'Size' of the given code point.
 charSize :: Char -> Size
 charSize c
-  | ord c < 0x10000 = exactSize 1
-  | otherwise       = exactSize 2
+  | c' < 0x80    = exactSize 1
+  | c' < 0x800   = exactSize 2
+  | c' < 0x10000 = exactSize 3
+  | otherwise    = exactSize 4
+  where
+    c' = ord c
 
 -- | The 'Size' of @n@ code points.
 codePointsSize :: Int -> Size
-codePointsSize n = Between n (2*n)
+codePointsSize n = Between n (4*n)
 {-# INLINE codePointsSize #-}
 
 exactSize :: Int -> Size
