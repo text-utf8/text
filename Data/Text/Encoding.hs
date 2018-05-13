@@ -139,9 +139,9 @@ decodeUtf8With onErr s@(PS fp off len) = runST $ do
           then do
             n <- peek destOffPtr
             dest' <- unsafeSTToIO (A.unsafeFreeze dest)
-            pure (Text dest' 0 (fromIntegral n))
+            return (Text dest' 0 (fromIntegral n))
           else do
-            pure (F.unstream (E.streamUtf8 onErr s))
+            return (F.unstream (E.streamUtf8 onErr s))
  where
   desc = "Data.Text.Internal.Encoding.decodeUtf8: Invalid UTF-8 stream"
 {- INLINE[0] decodeUtf8With #-}

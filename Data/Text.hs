@@ -435,7 +435,7 @@ compareText :: Text -> Text -> Ordering
 compareText (Text arrA offA lenA) (Text arrB offB lenB)
     | lenA == 0 || lenB == 0 = compare lenA lenB
     | otherwise =
-        A.cmp arrA offA arrB offB (min lenA lenB) <> compare lenA lenB
+        A.cmp arrA offA arrB offB (min lenA lenB) `mappend` compare lenA lenB
 
 -- -----------------------------------------------------------------------------
 -- * Conversion to/from 'Text'

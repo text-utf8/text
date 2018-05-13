@@ -83,7 +83,7 @@ fromPtr ptr (I8 len) =
     return $! Text arr 0 len
   where
     arr = A.run (A.new len >>= copy)
-    copy marr = A.copyFromPtr marr 0 ptr 0 len *> pure marr
+    copy marr = A.copyFromPtr marr 0 ptr 0 len >> return marr
 
 -- $lowlevel
 --
