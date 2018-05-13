@@ -27,13 +27,6 @@ description:
     .
     > import qualified Data.Text as T
     .
-    To use an extended and very rich family of functions for working
-    with Unicode text (including normalization, regular expressions,
-    non-standard encodings, text breaking, and locales), see
-    the [text-icu package](https://hackage.haskell.org/package/text-icu)
-    based on the well-respected and liberally
-    licensed [ICU library](http://site.icu-project.org/).
-    .
     ## Relationship to the standard text package
     .
     This is a fork of the [text](https://hackage.haskell.org/package/text)
