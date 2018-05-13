@@ -1,5 +1,7 @@
+cabal-version:  1.12
 name:           text-utf8
 version:        1.2.3.0
+
 homepage:       https://github.com/text-utf8
 bug-reports:    https://github.com/text-utf8/test-utf8/issues
 synopsis:       An efficient packed UTF-8 backed Unicode text type.
@@ -38,7 +40,6 @@ description:
     Another package providing an UTF-8 backed Text type with a diffferent cost-mode
     is the [text-short](https://hackage.haskell.org/package/text-short) package.
 
-
 license:        BSD2
 license-file:   LICENSE
 author:         Bryan O'Sullivan <bos@serpentine.com>
@@ -46,7 +47,7 @@ maintainer:     Herbert Valerio Riedel <hvr@gnu.org>
 copyright:      2009-2011 Bryan O'Sullivan, 2008-2009 Tom Harper
 category:       Data, Text
 build-type:     Simple
-cabal-version:  1.12
+tested-with:    GHC==8.4.2, GHC==8.2.2, GHC==8.0.2, GHC==7.10.3, GHC==7.8.4
 extra-source-files:
     -- scripts/CaseFolding.txt
     -- scripts/SpecialCasing.txt
