@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include "text_cbits.h"
 
-int _hs_text_memcmp(const void *a, size_t aoff, const void *b, size_t boff,
+int _hs_text_utf_8_memcmp(const void *a, size_t aoff, const void *b, size_t boff,
         size_t n)
 {
   return memcmp(a + aoff, b + boff, n);
@@ -85,14 +85,14 @@ decode(uint32_t *state, uint32_t* codep, uint32_t byte) {
  */
 #if defined(__GNUC__) || defined(__clang__)
 static inline uint8_t const *
-_hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
+_hs_text_utf_8_decode_utf8_int(uint8_t *const dest, size_t *destoff,
        const uint8_t **src, const uint8_t *srcend,
        uint32_t *codepoint0, uint32_t *state0)
   __attribute((always_inline));
 #endif
 
 static inline uint8_t const *
-_hs_text_decode_utf8_int(uint8_t *const dest, size_t *destoff,
+_hs_text_utf_8_decode_utf8_int(uint8_t *const dest, size_t *destoff,
        const uint8_t **src, const uint8_t *srcend,
        uint32_t *codepoint0, uint32_t *state0)
 {
@@ -149,12 +149,12 @@ done:
 }
 
 uint8_t const *
-_hs_text_decode_utf8_state(uint8_t *const dest, size_t *destoff,
+_hs_text_utf_8_decode_utf8_state(uint8_t *const dest, size_t *destoff,
                            const uint8_t **src,
                            const uint8_t *srcend,
                            uint32_t *codepoint0, uint32_t *state0)
 {
-  uint8_t const *ret = _hs_text_decode_utf8_int(dest, destoff, src, srcend,
+  uint8_t const *ret = _hs_text_utf_8_decode_utf8_int(dest, destoff, src, srcend,
             codepoint0, state0);
   if (*state0 == UTF8_REJECT)
     ret -=1;
@@ -165,12 +165,12 @@ _hs_text_decode_utf8_state(uint8_t *const dest, size_t *destoff,
  * Helper to decode buffer and discard final decoder state
  */
 const uint8_t *
-_hs_text_decode_utf8(uint8_t *const dest, size_t *destoff,
+_hs_text_utf_8_decode_utf8(uint8_t *const dest, size_t *destoff,
                      const uint8_t *src, const uint8_t *const srcend)
 {
   uint32_t codepoint;
   uint32_t state = UTF8_ACCEPT;
-  uint8_t const *ret = _hs_text_decode_utf8_int(dest, destoff, &src, srcend,
+  uint8_t const *ret = _hs_text_utf_8_decode_utf8_int(dest, destoff, &src, srcend,
             &codepoint, &state);
   /* Back up if we have an incomplete or invalid encoding */
   if (state != UTF8_ACCEPT)

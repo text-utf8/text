@@ -289,7 +289,7 @@ cmp arrA offA arrB offB count = inlinePerformIO $ do
   return $ compare i 0
 {-# INLINE cmp #-}
 
-foreign import ccall unsafe "_hs_text_memcmp" memcmp
+foreign import ccall unsafe "_hs_text_utf_8_memcmp" memcmp
     :: ByteArray# -> CSize -> ByteArray# -> CSize -> CSize -> IO CInt
 
 -- | Copy some elements of an immutable array to a pointer

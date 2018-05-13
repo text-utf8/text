@@ -467,11 +467,11 @@ encodeUtf32BE :: Text -> ByteString
 encodeUtf32BE txt = E.unstream (E.restreamUtf32BE (F.stream txt))
 {-# INLINE encodeUtf32BE #-}
 
-foreign import ccall unsafe "_hs_text_decode_utf8" c_decode_utf8
+foreign import ccall unsafe "_hs_text_utf_8_decode_utf8" c_decode_utf8
     :: MutableByteArray# s -> Ptr CSize
     -> Ptr Word8 -> Ptr Word8 -> IO (Ptr Word8)
 
-foreign import ccall unsafe "_hs_text_decode_utf8_state" c_decode_utf8_with_state
+foreign import ccall unsafe "_hs_text_utf_8_decode_utf8_state" c_decode_utf8_with_state
     :: MutableByteArray# s -> Ptr CSize
     -> Ptr (Ptr Word8) -> Ptr Word8
     -> Ptr CodePoint -> Ptr DecoderState -> IO (Ptr Word8)
