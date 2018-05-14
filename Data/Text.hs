@@ -754,6 +754,85 @@ nthCodepoint (Exts.I# n0#) (Text arr (Exts.I# off0#) (Exts.I# len0#))
         | otherwise                       = Exts.I# off#
 
 
+-- | Returns the offset of the byte which starts the 'n'th codepoint from the
+-- _end_ of the 'Text', or '-1' if there are more than 'n' codepoints prersent.
+-- If 'n' is negative, 0 is returned (it is treated the same as if zero was passed).
+-- Used for fast take/dropEnd.
+nthCodepointEnd :: Int -> Text -> Int
+nthCodepointEnd (Exts.I# n0#) (Text arr (Exts.I# off0#) (Exts.I# len0#))
+    -- if n > len there are definitely less than n characters
+    | Exts.isTrue# (n0# >=# len0#) = -1
+    | Exts.isTrue# (n0# <# 0#)     = 0
+    | otherwise = initFastNthEnd (off0# +# len0#) (int2Word# n0#) where
+    ba = A.aBA arr
+    start# = off0#
+    startVec# = quotInt# start# WORDBYTES
+
+    initFastNthEnd :: Int# -> Word# -> Int
+    initFastNthEnd off# n#
+        | Exts.isTrue# (off# < start#)    = -1
+        -- If n less than bytes/word, clean up in the epilogue loop
+        | Exts.isTrue# (n# `leWord#` WORDBYTESW) = endFastNthEnd off# n#
+        -- If word aligned, process in the fast loop
+        | otherwise = case indexWord8Array# ba off# of
+            b# 
+                -- If the current byte is at a WORD boundary, count it and start
+                -- vectorised counting from _previous_ WORD.
+                | Exts.isTrue# (andI# off# ALIGN_MASK ==# 0#)
+                    -> vecFastNthEnd 
+                        (quotInt# off# WORDBYTES -# 1) 
+                        (plusWord# n# (minusWord# (isContByte# b#) 1##))
+                -- keep looking for WORD boundard
+                | otherwise -> 
+                    initFastNthEnd 
+                        (off# -# 1#)
+                        (plusWord# n# (minusWord# (isContByte# b#) 1##))
+            -- isContByte b     = 1|0
+            -- isContByte b - 1 = 0|-1
+            -- therefore, we only subtract 1 from n if it is a start byte (not continuation)
+
+    -- Count down n one word at a time. Offset is in Word#'s not bytes
+    vecFastNthEnd :: Int# -> Word# -> Int
+    vecFastNthEnd offWord# n#
+        -- Check for end of array, or if there are less than #bytes/word left
+        -- left to find and let endFastNthEnd take care of any cleanup.
+        | Exts.isTrue# ((offWord# <=# startVec#) `orI#` leWord# n# WORDBYTESW) =
+            endFastNthEnd (offWord# *# WORDBYTES) n#
+        | otherwise = vecFastNthEnd
+                (offWord# -# 1#)
+                -- Subtract #bytes/word, add the number of non codepoint start
+                -- chars
+                (plusWord#
+                    (minusWord# n# WORDBYTESW)
+                    (countContBytes# (READWORD ba offWord#)))
+
+    endFastNthEnd :: Int# -> Word# -> Int
+    endFastNthEnd off# n#
+        -- overrun
+        | Exts.isTrue# (off# <# start#)    = -1
+        -- still more characters to find
+        | Exts.isTrue# (n# `gtWord#` 0##) = let
+            b# = indexWord8Array# ba off#
+            -- isContByte b     = 1|0
+            -- isContByte b - 1 = 0|-1
+            -- therefore, we only subtract 1 from n if it is not a continuation byte
+            in endFastNthEnd (off# -# 1#) (plusWord# n# (minusWord# (isContByte# b#) 1##))
+        -- n == 0
+        | otherwise = cleanEnd off#
+    
+    -- Cleans up the final character, finds the offset to the next
+    -- non-continuation byte
+    cleanEnd :: Int# -> Int
+    cleanEnd off#
+        -- overrun
+        | Exts.isTrue# (off# <# start#)    = -1
+        -- if it's a continuation byte, search again
+        | Exts.isTrue# (word2Int# (isContByte# (indexWord8Array# ba off#)))
+            = cleanEnd (off# -# 1#)
+        -- If this is not a contiunuation byte, the previous byte is the last one
+        | otherwise                       = Exts.I# off#
+
+
 #endif
 
 -- | /O(n)/ Compare the count of characters in a 'Text' to a number.
