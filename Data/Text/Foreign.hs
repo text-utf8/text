@@ -53,11 +53,9 @@ import qualified Data.Text.Array as A
 -- to have a fixed address in the Haskell heap. All communication with
 -- native code must thus occur by copying data back and forth.
 --
--- The 'Text' type's internal representation is UTF-16, using the
--- platform's native endianness.  This makes copied data suitable for
--- use with native libraries that use a similar representation, such
--- as ICU.  To interoperate with native libraries that use different
--- internal representations, such as UTF-8 or UTF-32, consider using
+-- The 'Text' type's internal representation is UTF-8.
+-- To interoperate with native libraries that use different
+-- internal representations, such as UTF-16 or UTF-32, consider using
 -- the functions in the 'Data.Text.Encoding' module.
 
 -- | A type representing a number of UTF-16 code units.

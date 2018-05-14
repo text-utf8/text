@@ -304,7 +304,7 @@ import Text.Printf (PrintfArg, formatArg, formatString)
 -- \"Performs replacement on invalid scalar values\".
 --
 -- (One reason for this policy of replacement is that internally, a
--- 'Text' value is represented as packed UTF-16 data. Values in the
+-- 'Text' value is represented as packed UTF-8 data. Values in the
 -- range U+D800 through U+DFFF are used by UTF-16 to denote surrogate
 -- code points, and so cannot be represented. The functions replace
 -- invalid scalar values, instead of dropping them, as a security
