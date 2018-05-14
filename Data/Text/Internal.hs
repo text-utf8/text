@@ -168,13 +168,13 @@ infixl 7 `mul32`
 
 -- $internals
 --
--- Internally, the 'Text' type is represented as an array of 'Word16'
--- UTF-16 code units. The offset and length fields in the constructor
+-- Internally, the 'Text' type is represented as an array of 'Word8'
+-- UTF-8 code units. The offset and length fields in the constructor
 -- are in these units, /not/ units of 'Char'.
 --
 -- Invariants that all functions must maintain:
 --
--- * Since the 'Text' type uses UTF-16 internally, it cannot represent
+-- * Since the 'Text' type uses UTF-8 internally, it cannot represent
 --   characters in the reserved surrogate code point range U+D800 to
 --   U+DFFF. To maintain this invariant, the 'safe' function maps
 --   'Char' values in this range to the replacement character (U+FFFD,

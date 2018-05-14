@@ -13,10 +13,13 @@ you can clone from one of the following locations:
 * Git mirror repository:
   [github.com/bos/text-test-data](https://github.com/bos/text-test-data)
 
-You should clone that repository into the `tests` subdirectory (your
-clone must be named `text-test-data` locally), then run `make -C
-tests/text-test-data` to uncompress the test files.  Many tests and
-benchmarks will fail if the test files are missing.
+You can clone either repository into the `tests` subdirectory using
+
+    cd tests/
+    make text-test-data         # to clone from mercurial, OR
+    make VCS=git text-test-data # to clone from git
+
+Many tests and benchmarks will fail if the test files are missing.
 
 Functional tests
 ----------------
@@ -54,10 +57,12 @@ To compile the benchmarks, navigate to the `benchmarks` subdirectory and run
 
     ./dist/build/text-benchmarks/text-benchmarks
 
+Or if you have a recent enough `cabal`, you can build and run the
+benchmarks via
+
+    cabal new-run exe:text-benchmarks -- --help
+
 However, since there's quite a lot of benchmarks, you usually don't want to
-run them all. Instead, use the `-l` flag to get a list of benchmarks:
-
-    ./dist/build/text-benchmarks/text-benchmarks
-
-And run the ones you want to inspect. If you want to configure the benchmarks
+run them all. Instead, use the `-l` flag to get a list of benchmarks
+and run the ones you want to inspect. If you want to configure the benchmarks
 further, the exact parameters can be changed in `Benchmarks.hs`.

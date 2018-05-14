@@ -8,7 +8,6 @@
 --               (c) 2009 Simon Marlow
 -- License     : BSD-style
 -- Maintainer  : bos@serpentine.com
--- Stability   : experimental
 -- Portability : GHC
 --
 -- Efficient locale-sensitive support for text I\/O.
@@ -336,3 +335,7 @@ putStrLn = hPutStrLn stdout
 -- >
 -- > putStr_Utf16LE :: Text -> IO ()
 -- > putStr_Utf16LE t = B.putStr (encodeUtf16LE t)
+--
+-- On transcoding errors, an 'IOError' exception is thrown. You can
+-- use the API in "Data.Text.Encoding" if you need more control over
+-- error handling or transcoding.

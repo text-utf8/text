@@ -5,7 +5,6 @@
 --
 -- License     : BSD-style
 -- Maintainer  : bos@serpentine.com
--- Stability   : experimental
 -- Portability : GHC
 --
 -- Support for using 'Text' data with native code via the Haskell
@@ -35,11 +34,6 @@ module Data.Text.Foreign
 #if defined(ASSERTS)
 import Control.Exception (assert)
 #endif
-#if __GLASGOW_HASKELL__ >= 702
-import Control.Monad.ST.Unsafe (unsafeIOToST)
-#else
-import Control.Monad.ST (unsafeIOToST)
-#endif
 import qualified Data.Text.Internal.Encoding.Utf8 as U8
 import Data.ByteString.Unsafe (unsafePackCStringLen, unsafeUseAsCStringLen)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -50,8 +44,7 @@ import Data.Word (Word8)
 import Foreign.C.String (CStringLen)
 import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrArray, withForeignPtr)
 import Foreign.Marshal.Alloc (allocaBytes)
-import Foreign.Ptr (Ptr, castPtr, plusPtr)
-import Foreign.Storable (peek, poke)
+import Foreign.Ptr (Ptr, castPtr)
 import qualified Data.Text.Array as A
 
 -- $interop
@@ -60,11 +53,9 @@ import qualified Data.Text.Array as A
 -- to have a fixed address in the Haskell heap. All communication with
 -- native code must thus occur by copying data back and forth.
 --
--- The 'Text' type's internal representation is UTF-16, using the
--- platform's native endianness.  This makes copied data suitable for
--- use with native libraries that use a similar representation, such
--- as ICU.  To interoperate with native libraries that use different
--- internal representations, such as UTF-8 or UTF-32, consider using
+-- The 'Text' type's internal representation is UTF-8.
+-- To interoperate with native libraries that use different
+-- internal representations, such as UTF-16 or UTF-32, consider using
 -- the functions in the 'Data.Text.Encoding' module.
 
 -- | A type representing a number of UTF-16 code units.
@@ -84,7 +75,7 @@ fromPtr ptr (I8 len) =
     return $! Text arr 0 len
   where
     arr = A.run (A.new len >>= copy)
-    copy marr = A.copyFromPtr marr 0 ptr 0 len *> pure marr
+    copy marr = A.copyFromPtr marr 0 ptr 0 len >> return marr
 
 -- $lowlevel
 --
@@ -147,6 +138,8 @@ asForeignPtr t@(Text _arr _off len) = do
 -- | /O(n)/ Decode a C string with explicit length, which is assumed
 -- to have been encoded as UTF-8. If decoding fails, a
 -- 'UnicodeException' is thrown.
+--
+-- @since 1.0.0.0
 peekCStringLen :: CStringLen -> IO Text
 peekCStringLen cs = do
   bs <- unsafePackCStringLen cs
@@ -159,5 +152,7 @@ peekCStringLen cs = do
 -- The temporary storage is freed when the subcomputation terminates
 -- (either normally or via an exception), so the pointer to the
 -- temporary storage must /not/ be used after this function returns.
+--
+-- @since 1.0.0.0
 withCStringLen :: Text -> (CStringLen -> IO a) -> IO a
 withCStringLen t act = unsafeUseAsCStringLen (encodeUtf8 t) act

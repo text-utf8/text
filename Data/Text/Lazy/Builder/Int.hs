@@ -9,7 +9,6 @@
 --              (c) 2011 MailRank, Inc.
 -- License:     BSD-style
 -- Maintainer:  Bryan O'Sullivan <bos@serpentine.com>
--- Stability:   experimental
 -- Portability: portable
 --
 -- Efficiently write an integral value to a 'Builder'.
@@ -32,6 +31,9 @@ import GHC.Base (quotInt, remInt)
 import GHC.Num (quotRemInteger)
 import GHC.Types (Int(..))
 import Control.Monad.ST
+#if MIN_VERSION_base(4,11,0)
+import Prelude hiding ((<>))
+#endif
 
 #ifdef  __GLASGOW_HASKELL__
 # if defined(INTEGER_GMP)

@@ -13,7 +13,6 @@
 --
 -- License     : BSD-style
 -- Maintainer  : bos@serpentine.com
--- Stability   : experimental
 -- Portability : GHC
 --
 -- A time and space-efficient implementation of Unicode text using
@@ -68,6 +67,7 @@ module Data.Text.Lazy
     , snoc
     , append
     , uncons
+    , unsnoc
     , head
     , last
     , tail
@@ -273,14 +273,16 @@ import Text.Printf (PrintfArg, formatArg, formatString)
 -- $replacement
 --
 -- A 'Text' value is a sequence of Unicode scalar values, as defined
--- in &#xa7;3.9, definition D76 of the Unicode 5.2 standard:
--- <http://www.unicode.org/versions/Unicode5.2.0/ch03.pdf#page=35>. As
--- such, a 'Text' cannot contain values in the range U+D800 to U+DFFF
--- inclusive. Haskell implementations admit all Unicode code points
--- (&#xa7;3.4, definition D10) as 'Char' values, including code points
--- from this invalid range.  This means that there are some 'Char'
--- values that are not valid Unicode scalar values, and the functions
--- in this module must handle those cases.
+-- in
+-- <http://www.unicode.org/versions/Unicode5.2.0/ch03.pdf#page=35 §3.9, definition D76 of the Unicode 5.2 standard >.
+-- As such, a 'Text' cannot contain values in the range U+D800 to
+-- U+DFFF inclusive. Haskell implementations admit all Unicode code
+-- points
+-- (<http://www.unicode.org/versions/Unicode5.2.0/ch03.pdf#page=13 §3.4, definition D10 >)
+-- as 'Char' values, including code points from this invalid range.
+-- This means that there are some 'Char' values that are not valid
+-- Unicode scalar values, and the functions in this module must handle
+-- those cases.
 --
 -- Within this module, many functions construct a 'Text' from one or
 -- more 'Char' values. Those functions will substitute 'Char' values
@@ -290,12 +292,12 @@ import Text.Printf (PrintfArg, formatArg, formatString)
 -- \"Performs replacement on invalid scalar values\".
 --
 -- (One reason for this policy of replacement is that internally, a
--- 'Text' value is represented as packed UTF-16 data. Values in the
+-- 'Text' value is represented as packed UTF-8 data. Values in the
 -- range U+D800 through U+DFFF are used by UTF-16 to denote surrogate
 -- code points, and so cannot be represented. The functions replace
 -- invalid scalar values, instead of dropping them, as a security
--- measure. For details, see Unicode Technical Report 36, &#xa7;3.5:
--- <http://unicode.org/reports/tr36#Deletion_of_Noncharacters>)
+-- measure. For details, see
+-- <http://unicode.org/reports/tr36/#Deletion_of_Noncharacters Unicode Technical Report 36, §3.5 >.)
 
 equal :: Text -> Text -> Bool
 equal Empty Empty = True
@@ -342,9 +344,13 @@ instance Read Text where
     readsPrec p str = [(pack x,y) | (x,y) <- readsPrec p str]
 
 #if MIN_VERSION_base(4,9,0)
--- Semigroup orphan instances for older GHCs are provided by
--- 'semigroups` package
-
+-- | Non-orphan 'Semigroup' instance only defined for
+-- @base-4.9.0.0@ and later; orphan instances for older GHCs are
+-- provided by
+-- the [semigroups](http://hackage.haskell.org/package/semigroups)
+-- package
+--
+-- @since 1.2.2.0
 instance Semigroup Text where
     (<>) = append
 #endif
@@ -362,6 +368,7 @@ instance IsString Text where
     fromString = pack
 
 #if __GLASGOW_HASKELL__ >= 708
+-- | @since 1.2.0.0
 instance Exts.IsList Text where
     type Item Text = Char
     fromList       = pack
@@ -374,6 +381,7 @@ instance NFData Text where
     rnf (Chunk _ ts) = rnf ts
 #endif
 
+-- | @since 1.2.1.0
 instance Binary Text where
     put t = put (encodeUtf8 t)
     get   = do
@@ -397,6 +405,8 @@ instance Data Text where
 
 #if MIN_VERSION_base(4,7,0)
 -- | Only defined for @base-4.7.0.0@ and later
+--
+-- @since 1.2.2.0
 instance PrintfArg Text where
   formatArg txt = formatString $ unpack txt
 #endif
@@ -475,9 +485,7 @@ fromStrict t = chunk t Empty
 -- -----------------------------------------------------------------------------
 -- * Basic functions
 
--- | /O(n)/ Adds a character to the front of a 'Text'.  This function
--- is more costly than its 'List' counterpart because it requires
--- copying a new array.  Subject to fusion.
+-- | /O(1)/ Adds a character to the front of a 'Text'.  Subject to fusion.
 cons :: Char -> Text -> Text
 cons c t = Chunk (T.singleton c) t
 {-# INLINE [1] cons #-}
@@ -560,6 +568,17 @@ init Empty = emptyError "init"
 "LAZY TEXT init -> unfused" [1] forall t.
     unstream (S.init (stream t)) = init t
  #-}
+
+-- | /O(n\/c)/ Returns the 'init' and 'last' of a 'Text', or 'Nothing' if
+-- empty.
+--
+-- * It is no faster than using 'init' and 'last'.
+--
+-- @since 1.2.3.0
+unsnoc :: Text -> Maybe (Text, Char)
+unsnoc Empty          = Nothing
+unsnoc ts@(Chunk _ _) = Just (init ts, last ts)
+{-# INLINE unsnoc #-}
 
 -- | /O(1)/ Tests whether a 'Text' is empty or not.  Subject to
 -- fusion.
@@ -820,6 +839,8 @@ toUpper t = unstream (S.toUpper (stream t))
 -- guides disagree on whether the book name \"The Hill of the Red
 -- Fox\" is correctly title cased&#x2014;but this function will
 -- capitalize /every/ word.
+--
+-- @since 1.0.0.0
 toTitle :: Text -> Text
 toTitle t = unstream (S.toTitle (stream t))
 {-# INLINE toTitle #-}
@@ -972,6 +993,8 @@ mapAccumR f = go
 
 -- | @'repeat' x@ is an infinite 'Text', with @x@ the value of every
 -- element.
+--
+-- @since 1.2.0.5
 repeat :: Char -> Text
 repeat c = let t = Chunk (T.replicate smallChunkSize (T.singleton c)) t
             in t
@@ -989,6 +1012,8 @@ replicate n t
 
 -- | 'cycle' ties a finite, non-empty 'Text' into a circular one, or
 -- equivalently, the infinite repetition of the original 'Text'.
+--
+-- @since 1.2.0.5
 cycle :: Text -> Text
 cycle Empty = emptyError "cycle"
 cycle t     = let t' = foldrChunks Chunk t' t
@@ -998,6 +1023,8 @@ cycle t     = let t' = foldrChunks Chunk t' t
 -- of @f@ to @x@:
 --
 -- > iterate f x == [x, f x, f (f x), ...]
+--
+-- @since 1.2.0.5
 iterate :: (Char -> Char) -> Char -> Text
 iterate f c = let t c' = Chunk (T.singleton c') (t (f c'))
                in t c
@@ -1061,6 +1088,8 @@ take i t0         = take' i t0
 -- Examples:
 --
 -- > takeEnd 3 "foobar" == "bar"
+--
+-- @since 1.1.1.0
 takeEnd :: Int64 -> Text -> Text
 takeEnd n t0
     | n <= 0    = empty
@@ -1099,6 +1128,8 @@ drop i t0
 -- Examples:
 --
 -- > dropEnd 3 "foobar" == "foo"
+--
+-- @since 1.1.1.0
 dropEnd :: Int64 -> Text -> Text
 dropEnd n t0
     | n <= 0    = t0
@@ -1150,12 +1181,15 @@ takeWhile p t0 = takeWhile' t0
 -- Examples:
 --
 -- > takeWhileEnd (=='o') "foo" == "oo"
+--
+-- @since 1.2.2.0
 takeWhileEnd :: (Char -> Bool) -> Text -> Text
 takeWhileEnd p = takeChunk empty . L.reverse . toChunks
   where takeChunk acc []     = acc
-        takeChunk acc (t:ts) = if T.length t' < T.length t
-                               then (Chunk t' acc)
-                               else takeChunk (Chunk t' acc) ts
+        takeChunk acc (t:ts)
+          | T.lengthWord8 t' < T.lengthWord8 t
+                             = chunk t' acc
+          | otherwise        = takeChunk (Chunk t' acc) ts
           where t' = T.takeWhileEnd p t
 {-# INLINE takeWhileEnd #-}
 

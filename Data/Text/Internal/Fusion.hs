@@ -50,19 +50,17 @@ module Data.Text.Internal.Fusion
     ) where
 
 import Prelude (Bool(..), Char, Maybe(..), Monad(..), Int,
-                Num(..), Ord(..), ($), (&&),
-                fromIntegral, otherwise)
-import Data.Bits ((.&.))
+                Num(..), Ord(..), ($),
+                otherwise)
 import Data.Text.Internal (Text(..))
 import Data.Text.Internal.Private (runText)
-import Data.Text.Internal.Unsafe.Char (ord, unsafeChr, unsafeWrite)
+import Data.Text.Internal.Unsafe.Char (unsafeWrite)
 import Data.Text.Internal.Unsafe.Shift (shiftL, shiftR)
 import qualified Data.Text.Array as A
 import qualified Data.Text.Internal.Fusion.Common as S
 import Data.Text.Internal.Fusion.Types
 import Data.Text.Internal.Fusion.Size
 import qualified Data.Text.Internal as I
-import qualified Data.Text.Internal.Encoding.Utf16 as U16
 import qualified Data.Text.Internal.Encoding.Utf8 as U8
 
 
@@ -156,7 +154,6 @@ reverse (Stream next s len0)
                        write s1 (len+i) newLen marr'
                      | otherwise -> write s1 i len marr
             where
-              n = ord x
               least = U8.charTailBytes x
               write t j l mar = do
                 _ <- unsafeWrite mar (j-least) x

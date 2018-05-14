@@ -11,14 +11,13 @@
 --
 -- License     : BSD-style
 -- Maintainer  : bos@serpentine.com
--- Stability   : experimental
 -- Portability : portable
 --
 -- Functions for converting 'Text' values to and from 'ByteString',
 -- using several standard encodings.
 --
 -- To gain access to a much larger family of encodings, use the
--- @text-icu@ package: <http://hackage.haskell.org/package/text-icu>
+-- <http://hackage.haskell.org/package/text-icu text-icu package>.
 
 module Data.Text.Encoding
     (
@@ -68,30 +67,30 @@ import Control.Monad.ST (unsafeIOToST, unsafeSTToIO)
 
 import Control.Exception (evaluate, try)
 import Control.Monad.ST (runST)
-import Data.Bits ((.&.))
 import Data.ByteString as B
 import Data.ByteString.Internal as B hiding (c2w)
 import Data.Text.Encoding.Error (OnDecodeError, UnicodeException, strictDecode)
 import Data.Text.Internal (Text(..), safe, text)
-import Data.Text.Internal.Private (runText)
-import Data.Text.Internal.Unsafe.Char (ord, unsafeWrite)
-import Data.Text.Internal.Unsafe.Shift (shiftR)
+import Data.Text.Internal.Unsafe.Char (unsafeWrite)
 import Data.Text.Show ()
 import Data.Text.Unsafe (unsafeDupablePerformIO)
 import Data.Word (Word8, Word32)
-import Foreign.C.Types (CSize(..))
+#if __GLASGOW_HASKELL__ >= 703
+import Foreign.C.Types (CSize)
+#else
+import Foreign.C.Types (CSize)
+#endif
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr, minusPtr, nullPtr, plusPtr)
 import Foreign.Storable (Storable, peek, poke)
-import GHC.Base (ByteArray#, MutableByteArray#)
+import GHC.Base (MutableByteArray#)
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Builder.Internal as B hiding (empty, append)
 import qualified Data.ByteString.Builder.Prim as BP
 import qualified Data.ByteString.Builder.Prim.Internal as BP
 import qualified Data.Text.Array as A
 import qualified Data.Text.Internal.Encoding.Fusion as E
-import qualified Data.Text.Internal.Encoding.Utf16 as U16
 import qualified Data.Text.Internal.Fusion as F
 
 #include "text_cbits.h"
@@ -136,11 +135,9 @@ decodeUtf8With onErr s@(PS fp off len) = runST $ do
           then do
             n <- peek destOffPtr
             dest' <- unsafeSTToIO (A.unsafeFreeze dest)
-            pure (Text dest' 0 (fromIntegral n))
+            return (Text dest' 0 (fromIntegral n))
           else do
-            pure (F.unstream (E.streamUtf8 onErr s))
- where
-  desc = "Data.Text.Internal.Encoding.decodeUtf8: Invalid UTF-8 stream"
+            return (F.unstream (E.streamUtf8 onErr s))
 {- INLINE[0] decodeUtf8With #-}
 
 -- $stream
@@ -197,6 +194,8 @@ decodeUtf8With onErr s@(PS fp off len) = runST $ do
 -- or continuation where it is encountered.
 
 -- | A stream oriented decoding result.
+--
+-- @since 1.0.0.0
 data Decoding = Some Text ByteString (ByteString -> Decoding)
 
 instance Show Decoding where
@@ -216,11 +215,15 @@ newtype DecoderState = DecoderState Word32 deriving (Eq, Show, Num, Storable)
 -- thrown (either by this function or a continuation) that cannot be
 -- caught in pure code.  For more control over the handling of invalid
 -- data, use 'streamDecodeUtf8With'.
+--
+-- @since 1.0.0.0
 streamDecodeUtf8 :: ByteString -> Decoding
 streamDecodeUtf8 = streamDecodeUtf8With strictDecode
 
 -- | Decode, in a stream oriented way, a 'ByteString' containing UTF-8
 -- encoded text.
+--
+-- @since 1.0.0.0
 streamDecodeUtf8With :: OnDecodeError -> ByteString -> Decoding
 streamDecodeUtf8With onErr = decodeChunk B.empty 0 0
  where
@@ -296,6 +299,8 @@ decodeUtf8' = unsafeDupablePerformIO . try . evaluate . decodeUtf8With strictDec
 {-# INLINE decodeUtf8' #-}
 
 -- | Encode text to a ByteString 'B.Builder' using UTF-8 encoding.
+--
+-- @since 1.1.0.0
 encodeUtf8Builder :: Text -> B.Builder
 encodeUtf8Builder = \t -> B.builder (textCopyStep t)
 {-# INLINE encodeUtf8Builder #-}
@@ -322,6 +327,8 @@ textCopyStep !(Text arr off len) k = go 0 len
 --
 -- Use this function is to implement efficient encoders for text-based formats
 -- like JSON or HTML.
+--
+-- @since 1.1.0.0
 {-# INLINE encodeUtf8BuilderEscaped #-}
 -- TODO: Extend documentation with references to source code in @blaze-html@
 -- or @aeson@ that uses this function.
@@ -350,8 +357,8 @@ encodeUtf8BuilderEscaped be =
             goPartial !iendTmp = go i0 op0
               where
                 go !i !op
-                  | i < iendTmp = case a of
-                      a | a <= 0x7F ->
+                  | i < iendTmp = case () of
+                      _ | a <= 0x7F ->
                             BP.runB be (fromIntegral a) op >>= go (i + 1)
                         | 0xC2 <= a && a <= 0xDF -> do
                             poke8 0 a
@@ -460,11 +467,11 @@ encodeUtf32BE :: Text -> ByteString
 encodeUtf32BE txt = E.unstream (E.restreamUtf32BE (F.stream txt))
 {-# INLINE encodeUtf32BE #-}
 
-foreign import ccall unsafe "_hs_text_decode_utf8" c_decode_utf8
+foreign import ccall unsafe "_hs_text_utf_8_decode_utf8" c_decode_utf8
     :: MutableByteArray# s -> Ptr CSize
     -> Ptr Word8 -> Ptr Word8 -> IO (Ptr Word8)
 
-foreign import ccall unsafe "_hs_text_decode_utf8_state" c_decode_utf8_with_state
+foreign import ccall unsafe "_hs_text_utf_8_decode_utf8_state" c_decode_utf8_with_state
     :: MutableByteArray# s -> Ptr CSize
     -> Ptr (Ptr Word8) -> Ptr Word8
     -> Ptr CodePoint -> Ptr DecoderState -> IO (Ptr Word8)

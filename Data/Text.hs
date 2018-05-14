@@ -21,7 +21,6 @@
 --
 -- License     : BSD-style
 -- Maintainer  : bos@serpentine.com
--- Stability   : experimental
 -- Portability : GHC
 --
 -- A time and space-efficient implementation of Unicode text.
@@ -38,8 +37,9 @@
 --
 -- To use an extended and very rich family of functions for working
 -- with Unicode text (including normalization, regular expressions,
--- non-standard encodings, text breaking, and locales), see
--- <http://hackage.haskell.org/package/text-icu the text-icu package >.
+-- non-standard encodings, text breaking, and locales), see the
+-- <http://hackage.haskell.org/package/text-icu text-icu package >.
+--
 
 module Data.Text
     (
@@ -48,6 +48,9 @@ module Data.Text
 
     -- * Acceptable data
     -- $replacement
+
+    -- * Definition of character
+    -- $character_definition
 
     -- * Fusion
     -- $fusion
@@ -66,6 +69,7 @@ module Data.Text
     , snoc
     , append
     , uncons
+    , unsnoc
     , head
     , last
     , tail
@@ -235,10 +239,8 @@ import Data.Text.Show (singleton, unpack, unpackCString#)
 import qualified Prelude as P
 import Data.Text.Unsafe (Iter(..), iter, iter_, lengthWord8, reverseIter,
                          reverseIter_, unsafeHead, unsafeTail, takeWord8)
-import Data.Text.Internal.Unsafe.Char (unsafeChr)
 import qualified Data.Text.Internal.Functions as F
 import qualified Data.Text.Internal.Encoding.Utf8 as U8
-import qualified Data.Text.Internal.Encoding.Utf16 as U16
 import Data.Text.Internal.Search (indices)
 #if defined(__HADDOCK__)
 import Data.ByteString (ByteString)
@@ -256,6 +258,18 @@ import Text.Printf (PrintfArg, formatArg, formatString)
 #ifdef VECFUNCTIONS
 import GHC.Prim
 #endif
+
+-- $character_definition
+--
+-- This package uses the term /character/ to denote Unicode /code points/.
+--
+-- Note that this is not the same thing as a grapheme (e.g. a
+-- composition of code points that form one visual symbol). For
+-- instance, consider the grapheme \"&#x00e4;\". This symbol has two
+-- Unicode representations: a single code-point representation
+-- @U+00E4@ (the @LATIN SMALL LETTER A WITH DIAERESIS@ code point),
+-- and a two code point representation @U+0061@ (the \"@A@\" code
+-- point) and @U+0308@ (the @COMBINING DIAERESIS@ code point).
 
 -- $strict
 --
@@ -300,7 +314,7 @@ import GHC.Prim
 -- \"Performs replacement on invalid scalar values\".
 --
 -- (One reason for this policy of replacement is that internally, a
--- 'Text' value is represented as packed UTF-16 data. Values in the
+-- 'Text' value is represented as packed UTF-8 data. Values in the
 -- range U+D800 through U+DFFF are used by UTF-16 to denote surrogate
 -- code points, and so cannot be represented. The functions replace
 -- invalid scalar values, instead of dropping them, as a security
@@ -345,9 +359,13 @@ instance Read Text where
     readsPrec p str = [(pack x,y) | (x,y) <- readsPrec p str]
 
 #if MIN_VERSION_base(4,9,0)
--- Semigroup orphan instances for older GHCs are provided by
--- 'semigroups` package
-
+-- | Non-orphan 'Semigroup' instance only defined for
+-- @base-4.9.0.0@ and later; orphan instances for older GHCs are
+-- provided by
+-- the [semigroups](http://hackage.haskell.org/package/semigroups)
+-- package
+--
+-- @since 1.2.2.0
 instance Semigroup Text where
     (<>) = append
 #endif
@@ -365,6 +383,7 @@ instance IsString Text where
     fromString = pack
 
 #if __GLASGOW_HASKELL__ >= 708
+-- | @since 1.2.0.0
 instance Exts.IsList Text where
     type Item Text = Char
     fromList       = pack
@@ -375,6 +394,7 @@ instance Exts.IsList Text where
 instance NFData Text where rnf !_ = ()
 #endif
 
+-- | @since 1.2.1.0
 instance Binary Text where
     put t = put (encodeUtf8 t)
     get   = do
@@ -408,6 +428,8 @@ instance Data Text where
 
 #if MIN_VERSION_base(4,7,0)
 -- | Only defined for @base-4.7.0.0@ and later
+--
+-- @since 1.2.2.0
 instance PrintfArg Text where
   formatArg txt = formatString $ unpack txt
 #endif
@@ -420,17 +442,10 @@ textDataType = mkDataType "Data.Text.Text" [packConstr]
 
 -- | /O(n)/ Compare two 'Text' values lexicographically.
 compareText :: Text -> Text -> Ordering
-compareText ta@(Text _arrA _offA lenA) tb@(Text _arrB _offB lenB)
-    | lenA == 0 && lenB == 0 = EQ
-    | otherwise              = go 0 0
-  where
-    go !i !j
-        | i >= lenA || j >= lenB = compare lenA lenB
-        | a < b                  = LT
-        | a > b                  = GT
-        | otherwise              = go (i+di) (j+dj)
-      where Iter a di = iter ta i
-            Iter b dj = iter tb j
+compareText (Text arrA offA lenA) (Text arrB offB lenB)
+    | lenA == 0 || lenB == 0 = compare lenA lenB
+    | otherwise =
+        A.cmp arrA offA arrB offB (min lenA lenB) `mappend` compare lenA lenB
 
 -- -----------------------------------------------------------------------------
 -- * Conversion to/from 'Text'
@@ -555,6 +570,16 @@ init t@(Text arr off len)
 "TEXT init -> unfused" [1] forall t.
     unstream (S.init (stream t)) = init t
  #-}
+
+-- | /O(1)/ Returns all but the last character and the last character of a
+-- 'Text', or 'Nothing' if empty.
+--
+-- @since 1.2.3.0
+unsnoc :: Text -> Maybe (Text, Char)
+unsnoc t@(Text _ _ len)
+    | len <= 0                 = Nothing
+    | otherwise                = Just (init t, last t) -- TODO
+{-# INLINE [1] unsnoc #-}
 
 -- | /O(1)/ Tests whether a 'Text' is empty or not.  Subject to
 -- fusion.
@@ -883,8 +908,15 @@ compareLength t n = S.compareLengthI (stream t) n
 -- -----------------------------------------------------------------------------
 -- * Transformations
 -- | /O(n)/ 'map' @f@ @t@ is the 'Text' obtained by applying @f@ to
--- each element of @t@.  Subject to fusion.  Performs replacement on
--- invalid scalar values.
+-- each element of @t@.
+--
+-- Example:
+--
+-- >>> let message = pack "I am not angry. Not at all."
+-- >>> T.map (\c -> if c == '.' then '!' else c) message
+-- "I am not angry! Not at all!"
+--
+-- Subject to fusion.  Performs replacement on invalid scalar values.
 map :: (Char -> Char) -> Text -> Text
 map f t = unstream (S.map (safe . f) (stream t))
 {-# INLINE [1] map #-}
@@ -892,18 +924,36 @@ map f t = unstream (S.map (safe . f) (stream t))
 -- | /O(n)/ The 'intercalate' function takes a 'Text' and a list of
 -- 'Text's and concatenates the list after interspersing the first
 -- argument between each element of the list.
+--
+-- Example:
+--
+-- >>> T.intercalate "NI!" ["We", "seek", "the", "Holy", "Grail"]
+-- "WeNI!seekNI!theNI!HolyNI!Grail"
 intercalate :: Text -> [Text] -> Text
 intercalate t = concat . (F.intersperse t)
 {-# INLINE intercalate #-}
 
 -- | /O(n)/ The 'intersperse' function takes a character and places it
--- between the characters of a 'Text'.  Subject to fusion.  Performs
--- replacement on invalid scalar values.
+-- between the characters of a 'Text'.
+--
+-- Example:
+--
+-- >>> T.intersperse '.' "SHIELD"
+-- "S.H.I.E.L.D"
+--
+-- Subject to fusion.  Performs replacement on invalid scalar values.
 intersperse     :: Char -> Text -> Text
 intersperse c t = unstream (S.intersperse (safe c) (stream t))
 {-# INLINE intersperse #-}
 
--- | /O(n)/ Reverse the characters of a string. Subject to fusion.
+-- | /O(n)/ Reverse the characters of a string.
+--
+-- Example:
+--
+-- >>> T.reverse "desrever"
+-- "reversed"
+--
+-- Subject to fusion.
 reverse :: Text -> Text
 reverse t = S.reverse (stream t)
 {-# INLINE reverse #-}
@@ -922,12 +972,14 @@ reverse t = S.reverse (stream t)
 -- @needle@ occurs in @replacement@, that occurrence will /not/ itself
 -- be replaced recursively:
 --
--- > replace "oo" "foo" "oo" == "foo"
+-- >>> replace "oo" "foo" "oo"
+-- "foo"
 --
 -- In cases where several instances of @needle@ overlap, only the
 -- first one will be replaced:
 --
--- > replace "ofo" "bar" "ofofo" == "barfo"
+-- >>> replace "ofo" "bar" "ofofo"
+-- "barfo"
 --
 -- In (unlikely) bad cases, this function's time complexity degrades
 -- towards /O(n*m)/.
@@ -1041,6 +1093,8 @@ toUpper t = unstream (S.toUpper (stream t))
 -- guides disagree on whether the book name \"The Hill of the Red
 -- Fox\" is correctly title cased&#x2014;but this function will
 -- capitalize /every/ word.
+--
+-- @since 1.0.0.0
 toTitle :: Text -> Text
 toTitle t = unstream (S.toTitle (stream t))
 {-# INLINE toTitle #-}
@@ -1051,8 +1105,11 @@ toTitle t = unstream (S.toTitle (stream t))
 --
 -- Examples:
 --
--- > justifyLeft 7 'x' "foo"    == "fooxxxx"
--- > justifyLeft 3 'x' "foobar" == "foobar"
+-- >>> justifyLeft 7 'x' "foo"
+-- "fooxxxx"
+--
+-- >>> justifyLeft 3 'x' "foobar"
+-- "foobar"
 justifyLeft :: Int -> Char -> Text -> Text
 justifyLeft k c t
     | len >= k  = t
@@ -1073,8 +1130,11 @@ justifyLeft k c t
 --
 -- Examples:
 --
--- > justifyRight 7 'x' "bar"    == "xxxxbar"
--- > justifyRight 3 'x' "foobar" == "foobar"
+-- >>> justifyRight 7 'x' "bar"
+-- "xxxxbar"
+--
+-- >>> justifyRight 3 'x' "foobar"
+-- "foobar"
 justifyRight :: Int -> Char -> Text -> Text
 justifyRight k c t
     | len >= k  = t
@@ -1088,7 +1148,8 @@ justifyRight k c t
 --
 -- Examples:
 --
--- > center 8 'x' "HS" = "xxxHSxxx"
+-- >>> center 8 'x' "HS"
+-- "xxxHSxxx"
 center :: Int -> Char -> Text -> Text
 center k c t
     | len >= k  = t
@@ -1103,6 +1164,14 @@ center k c t
 -- of its 'Text' argument.  Note that this function uses 'pack',
 -- 'unpack', and the list version of transpose, and is thus not very
 -- efficient.
+--
+-- Examples:
+--
+-- >>> transpose ["green","orange"]
+-- ["go","rr","ea","en","ng","e"]
+--
+-- >>> transpose ["blue","red"]
+-- ["br","le","ud","e"]
 transpose :: [Text] -> [Text]
 transpose ts = P.map pack (L.transpose (P.map unpack ts))
 
@@ -1360,7 +1429,10 @@ iterN n t@(Text _arr _off len) = loop 0 0
 --
 -- Examples:
 --
--- > takeEnd 3 "foobar" == "bar"
+-- >>> takeEnd 3 "foobar"
+-- "bar"
+--
+-- @since 1.1.1.0
 takeEnd :: Int -> Text -> Text
 takeEnd n t@(Text arr off len)
     | n <= 0    = empty
@@ -1410,7 +1482,10 @@ drop n t@(Text arr off0 len0) = case nthCodepoint n t of
 --
 -- Examples:
 --
--- > dropEnd 3 "foobar" == "foo"
+-- >>> dropEnd 3 "foobar"
+-- "foo"
+--
+-- @since 1.1.1.0
 dropEnd :: Int -> Text -> Text
 dropEnd n t@(Text arr off len)
     | n <= 0    = t
@@ -1440,7 +1515,10 @@ takeWhile p t@(Text arr off len) = loop 0
 -- satisfy @p@.  Subject to fusion.
 -- Examples:
 --
--- > takeWhileEnd (=='o') "foo" == "oo"
+-- >>> takeWhileEnd (=='o') "foo"
+-- "oo"
+--
+-- @since 1.2.2.0
 takeWhileEnd :: (Char -> Bool) -> Text -> Text
 takeWhileEnd p t@(Text arr off len) = loop (len-1) len
   where loop !i !l | l <= 0    = t
@@ -1479,7 +1557,8 @@ dropWhile p t@(Text arr off len) = loop 0 0
 --
 -- Examples:
 --
--- > dropWhileEnd (=='.') "foo..." == "foo"
+-- >>> dropWhileEnd (=='.') "foo..."
+-- "foo"
 dropWhileEnd :: (Char -> Bool) -> Text -> Text
 dropWhileEnd p t@(Text arr off len) = loop (len-1) len
   where loop !i !l | l <= 0    = empty
@@ -1610,9 +1689,14 @@ tails t | null t    = [empty]
 --
 -- Examples:
 --
--- > splitOn "\r\n" "a\r\nb\r\nd\r\ne" == ["a","b","d","e"]
--- > splitOn "aaa"  "aaaXaaaXaaaXaaa"  == ["","X","X","X",""]
--- > splitOn "x"    "x"                == ["",""]
+-- >>> splitOn "\r\n" "a\r\nb\r\nd\r\ne"
+-- ["a","b","d","e"]
+--
+-- >>> splitOn "aaa"  "aaaXaaaXaaaXaaa"
+-- ["","X","X","X",""]
+--
+-- >>> splitOn "x"    "x"
+-- ["",""]
 --
 -- and
 --
@@ -1648,8 +1732,11 @@ splitOn pat@(Text _ _ l) src@(Text arr off len)
 -- resulting components do not contain the separators.  Two adjacent
 -- separators result in an empty component in the output.  eg.
 --
--- > split (=='a') "aabbaca" == ["","","bb","c",""]
--- > split (=='a') ""        == [""]
+-- >>> split (=='a') "aabbaca"
+-- ["","","bb","c",""]
+--
+-- >>> split (=='a') ""
+-- [""]
 split :: (Char -> Bool) -> Text -> [Text]
 split _ t@(Text _off _arr 0) = [t]
 split p t = loop t
@@ -1662,8 +1749,11 @@ split p t = loop t
 -- element may be shorter than the other chunks, depending on the
 -- length of the input. Examples:
 --
--- > chunksOf 3 "foobarbaz"   == ["foo","bar","baz"]
--- > chunksOf 4 "haskell.org" == ["hask","ell.","org"]
+-- >>> chunksOf 3 "foobarbaz"
+-- ["foo","bar","baz"]
+--
+-- >>> chunksOf 4 "haskell.org"
+-- ["hask","ell.","org"]
 chunksOf :: Int -> Text -> [Text]
 chunksOf k = go
   where
@@ -1708,8 +1798,11 @@ filter p t = unstream (S.filter p (stream t))
 --
 -- Examples:
 --
--- > breakOn "::" "a::b::c" ==> ("a", "::b::c")
--- > breakOn "/" "foobar"   ==> ("foobar", "")
+-- >>> breakOn "::" "a::b::c"
+-- ("a","::b::c")
+--
+-- >>> breakOn "/" "foobar"
+-- ("foobar","")
 --
 -- Laws:
 --
@@ -1737,7 +1830,8 @@ breakOn pat src@(Text arr off len)
 -- up to and including the last match of @needle@.  The second is the
 -- remainder of @haystack@, following the match.
 --
--- > breakOnEnd "::" "a::b::c" ==> ("a::b::", "c")
+-- >>> breakOnEnd "::" "a::b::c"
+-- ("a::b::","c")
 breakOnEnd :: Text -> Text -> (Text, Text)
 breakOnEnd pat src = (reverse b, reverse a)
     where (a,b) = breakOn (reverse pat) (reverse src)
@@ -1752,10 +1846,11 @@ breakOnEnd pat src = (reverse b, reverse a)
 --
 -- Examples:
 --
--- > breakOnAll "::" ""
--- > ==> []
--- > breakOnAll "/" "a/b/c/"
--- > ==> [("a", "/b/c/"), ("a/b", "/c/"), ("a/b/c", "/")]
+-- >>> breakOnAll "::" ""
+-- []
+--
+-- >>> breakOnAll "/" "a/b/c/"
+-- [("a","/b/c/"),("a/b","/c/"),("a/b/c","/")]
 --
 -- In (unlikely) bad cases, this function's time complexity degrades
 -- towards /O(n*m)/.
@@ -1954,9 +2049,14 @@ isInfixOf needle haystack
 --
 -- Examples:
 --
--- > stripPrefix "foo" "foobar" == Just "bar"
--- > stripPrefix ""    "baz"    == Just "baz"
--- > stripPrefix "foo" "quux"   == Nothing
+-- >>> stripPrefix "foo" "foobar"
+-- Just "bar"
+--
+-- >>> stripPrefix ""    "baz"
+-- Just "baz"
+--
+-- >>> stripPrefix "foo" "quux"
+-- Nothing
 --
 -- This is particularly useful with the @ViewPatterns@ extension to
 -- GHC, as follows:
@@ -1981,9 +2081,14 @@ stripPrefix p@(Text _arr _off plen) t@(Text arr off len)
 --
 -- Examples:
 --
--- > commonPrefixes "foobar" "fooquux" == Just ("foo","bar","quux")
--- > commonPrefixes "veeble" "fetzer"  == Nothing
--- > commonPrefixes "" "baz"           == Nothing
+-- >>> commonPrefixes "foobar" "fooquux"
+-- Just ("foo","bar","quux")
+--
+-- >>> commonPrefixes "veeble" "fetzer"
+-- Nothing
+--
+-- >>> commonPrefixes "" "baz"
+-- Nothing
 commonPrefixes :: Text -> Text -> Maybe (Text,Text,Text)
 commonPrefixes t0@(Text arr0 off0 len0) t1@(Text arr1 off1 len1) = go 0 0
   where
@@ -2000,9 +2105,14 @@ commonPrefixes t0@(Text arr0 off0 len0) t1@(Text arr1 off1 len1) = go 0 0
 --
 -- Examples:
 --
--- > stripSuffix "bar" "foobar" == Just "foo"
--- > stripSuffix ""    "baz"    == Just "baz"
--- > stripSuffix "foo" "quux"   == Nothing
+-- >>> stripSuffix "bar" "foobar"
+-- Just "foo"
+--
+-- >>> stripSuffix ""    "baz"
+-- Just "baz"
+--
+-- >>> stripSuffix "foo" "quux"
+-- Nothing
 --
 -- This is particularly useful with the @ViewPatterns@ extension to
 -- GHC, as follows:
@@ -2049,3 +2159,12 @@ copy (Text arr off len) = Text (A.run go) 0 len
       marr <- A.new len
       A.copyI marr 0 arr off len
       return marr
+
+
+-------------------------------------------------
+-- NOTE: the named chunk below used by doctest;
+--       verify the doctests via `doctest -fobject-code Data/Text.hs`
+
+-- $setup
+-- >>> :set -XOverloadedStrings
+-- >>> import qualified Data.Text as T

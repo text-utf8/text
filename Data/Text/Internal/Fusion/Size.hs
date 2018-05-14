@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, PatternGuards #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 -- |
 -- Module      : Data.Text.Internal.Fusion.Internal
@@ -19,11 +19,16 @@
 module Data.Text.Internal.Fusion.Size
     (
       Size
-    , exactly
+      -- * Sizes
     , exactSize
     , maxSize
     , betweenSize
     , unknownSize
+    , unionSize
+    , charSize
+    , codePointsSize
+      -- * Querying sizes
+    , exactly
     , smaller
     , larger
     , upperBound
@@ -32,11 +37,13 @@ module Data.Text.Internal.Fusion.Size
     , isEmpty
     ) where
 
+import Data.Char (ord)
 import Data.Text.Internal (mul)
 #if defined(ASSERTS)
 import Control.Exception (assert)
 #endif
 
+-- | A size in UTF-8 code units.
 data Size = Between {-# UNPACK #-} !Int {-# UNPACK #-} !Int -- ^ Lower and upper bounds on size.
           | Unknown                                         -- ^ Unknown size.
             deriving (Eq, Show)
@@ -45,6 +52,21 @@ exactly :: Size -> Maybe Int
 exactly (Between na nb) | na == nb = Just na
 exactly _ = Nothing
 {-# INLINE exactly #-}
+
+-- | The 'Size' of the given code point.
+charSize :: Char -> Size
+charSize c
+  | c' < 0x80    = exactSize 1
+  | c' < 0x800   = exactSize 2
+  | c' < 0x10000 = exactSize 3
+  | otherwise    = exactSize 4
+  where
+    c' = ord c
+
+-- | The 'Size' of @n@ code points.
+codePointsSize :: Int -> Size
+codePointsSize n = Between n (4*n)
+{-# INLINE codePointsSize #-}
 
 exactSize :: Int -> Size
 exactSize n =
@@ -70,6 +92,10 @@ betweenSize m n =
 #endif
     Between m n
 {-# INLINE betweenSize #-}
+
+unionSize :: Size -> Size -> Size
+unionSize (Between a b) (Between c d) = Between (min a c) (max b d)
+unionSize _ _ = Unknown
 
 unknownSize :: Size
 unknownSize = Unknown
@@ -140,11 +166,15 @@ lowerBound _ (Between n _) = n
 lowerBound k _             = k
 {-# INLINE lowerBound #-}
 
-compareSize :: Size -> Int -> Maybe Ordering
-compareSize (Between ma mb) n
-  | mb < n             = Just LT
-  | ma > n             = Just GT
-  | ma == n && mb == n = Just EQ
+-- | Determine the ordering relationship between two 'Size's, or 'Nothing' in
+-- the indeterminate case.
+compareSize :: Size -> Size -> Maybe Ordering
+compareSize (Between ma mb) (Between na nb)
+  | mb < na            = Just LT
+  | ma > nb            = Just GT
+  | ma == mb
+  , ma == na
+  , ma == nb           = Just EQ
 compareSize _ _        = Nothing
 
 

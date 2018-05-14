@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, MagicHash, Rank2Types #-}
+{-# LANGUAGE PatternGuards, BangPatterns, MagicHash, Rank2Types #-}
 -- |
 -- Module      : Data.Text.Internal.Fusion.Common
 -- Copyright   : (c) Bryan O'Sullivan 2009, 2012
@@ -117,7 +117,7 @@ import GHC.Prim (Addr#, chr#, indexCharOffAddr#, ord#)
 import GHC.Types (Char(..), Int(..))
 
 singleton :: Char -> Stream Char
-singleton c = Stream next False 1
+singleton c = Stream next False (codePointsSize 1)
     where next False = Yield c True
           next True  = Done
 {-# INLINE [0] singleton #-}
@@ -175,7 +175,7 @@ data C s = C0 !s
 
 -- | /O(n)/ Adds a character to the front of a Stream Char.
 cons :: Char -> Stream Char -> Stream Char
-cons !w (Stream next0 s0 len) = Stream next (C1 s0) (len+1)
+cons !w (Stream next0 s0 len) = Stream next (C1 s0) (len + codePointsSize 1)
     where
       next (C1 s) = Yield w (C0 s)
       next (C0 s) = case next0 s of
@@ -189,7 +189,7 @@ data Snoc a = N
 
 -- | /O(n)/ Adds a character to the end of a stream.
 snoc :: Stream Char -> Char -> Stream Char
-snoc (Stream next0 xs0 len) w = Stream next (J xs0) (len+1)
+snoc (Stream next0 xs0 len) w = Stream next (J xs0) (len + codePointsSize 1)
   where
     next (J xs) = case next0 xs of
       Done        -> Yield w N
@@ -237,7 +237,7 @@ uncons :: Stream Char -> Maybe (Char, Stream Char)
 uncons (Stream next s0 len) = loop_uncons s0
     where
       loop_uncons !s = case next s of
-                         Yield x s1 -> Just (x, Stream next s1 (len-1))
+                         Yield x s1 -> Just (x, Stream next s1 (len - codePointsSize 1))
                          Skip s'    -> loop_uncons s'
                          Done       -> Nothing
 {-# INLINE [0] uncons #-}
@@ -260,7 +260,7 @@ last (Stream next s0 _len) = loop0_last s0
 -- | /O(1)/ Returns all characters after the head of a Stream Char, which must
 -- be non-empty.
 tail :: Stream Char -> Stream Char
-tail (Stream next0 s0 len) = Stream next (C0 s0) (len-1)
+tail (Stream next0 s0 len) = Stream next (C0 s0) (len - codePointsSize 1)
     where
       next (C0 s) = case next0 s of
                       Done       -> emptyError "tail"
@@ -278,7 +278,7 @@ data Init s = Init0 !s
 -- | /O(1)/ Returns all but the last character of a Stream Char, which
 -- must be non-empty.
 init :: Stream Char -> Stream Char
-init (Stream next0 s0 len) = Stream next (Init0 s0) (len-1)
+init (Stream next0 s0 len) = Stream next (Init0 s0) (len - codePointsSize 1)
     where
       next (Init0 s) = case next0 s of
                          Done       -> emptyError "init"
@@ -318,11 +318,14 @@ lengthI (Stream next s0 _len) = loop_length 0 s0
 -- greater than the number or if the stream can't possibly be as long
 -- as the number supplied, and hence be more efficient.
 compareLengthI :: Integral a => Stream Char -> a -> Ordering
-compareLengthI (Stream next s0 len) n =
-    case compareSize len (fromIntegral n) of
-      Just o  -> o
-      Nothing -> loop_cmp 0 s0
+compareLengthI (Stream next s0 len) n
+    -- Note that @len@ tracks code units whereas we want to compare the length
+    -- in code points. Specifically, a stream with hint @len@ may consist of
+    -- anywhere from @len/2@ to @len@ code points.
+  | Just r <- compareSize len n' = r
+  | otherwise = loop_cmp 0 s0
     where
+      n' = codePointsSize $ fromIntegral n
       loop_cmp !z s  = case next s of
                          Done       -> compare z n
                          Skip    s' -> loop_cmp z s'
@@ -368,7 +371,7 @@ data I s = I1 !s
 -- | /O(n)/ Take a character and place it between each of the
 -- characters of a 'Stream Char'.
 intersperse :: Char -> Stream Char -> Stream Char
-intersperse c (Stream next0 s0 len) = Stream next (I1 s0) len
+intersperse c (Stream next0 s0 len) = Stream next (I1 s0) (len + unknownSize)
     where
       next (I1 s) = case next0 s of
         Done       -> Done
@@ -393,9 +396,11 @@ intersperse c (Stream next0 s0 len) = Stream next (I1 s0) len
 -- functions may map one input character to two or three output
 -- characters.
 
+-- | Map a 'Stream' through the given case-mapping function.
 caseConvert :: (forall s. Char -> s -> Step (CC s) Char)
             -> Stream Char -> Stream Char
-caseConvert remap (Stream next0 s0 len) = Stream next (CC s0 '\0' '\0') len
+caseConvert remap (Stream next0 s0 len) =
+    Stream next (CC s0 '\0' '\0') (len `unionSize` 3*len)
   where
     next (CC s '\0' _) =
         case next0 s of
@@ -458,7 +463,7 @@ toLower = caseConvert lowerMapping
 -- Fox\" is correctly title cased&#x2014;but this function will
 -- capitalize /every/ word.
 toTitle :: Stream Char -> Stream Char
-toTitle (Stream next0 s0 len) = Stream next (CC (False :*: s0) '\0' '\0') len
+toTitle (Stream next0 s0 len) = Stream next (CC (False :*: s0) '\0' '\0') (len + unknownSize)
   where
     next (CC (letter :*: s) '\0' _) =
       case next0 s of
@@ -479,7 +484,7 @@ data Justify i s = Just1 !i !s
 
 justifyLeftI :: Integral a => a -> Char -> Stream Char -> Stream Char
 justifyLeftI k c (Stream next0 s0 len) =
-    Stream next (Just1 0 s0) (larger (fromIntegral k) len)
+    Stream next (Just1 0 s0) (larger (fromIntegral k * charSize c + len) len)
   where
     next (Just1 n s) =
         case next0 s of
@@ -699,7 +704,7 @@ replicateI n (Stream next0 s0 len) =
 -- (a,b), in which case, a is the next Char in the string, and b is
 -- the seed value for further production.
 unfoldr :: (a -> Maybe (Char,a)) -> a -> Stream Char
-unfoldr f s0 = Stream next s0 1 -- HINT maybe too low
+unfoldr f s0 = Stream next s0 unknownSize
     where
       {-# INLINE next #-}
       next !s = case f s of
@@ -713,7 +718,7 @@ unfoldr f s0 = Stream next s0 1 -- HINT maybe too low
 -- 'unfoldr' when the length of the result is known.
 unfoldrNI :: Integral a => a -> (b -> Maybe (Char,b)) -> b -> Stream Char
 unfoldrNI n f s0 | n <  0    = empty
-                 | otherwise = Stream next (0 :*: s0) (fromIntegral (n*2)) -- HINT maybe too high
+                 | otherwise = Stream next (0 :*: s0) (maxSize $ fromIntegral (n*2))
     where
       {-# INLINE next #-}
       next (z :*: s) = case f s of
@@ -725,12 +730,12 @@ unfoldrNI n f s0 | n <  0    = empty
 -------------------------------------------------------------------------------
 --  * Substreams
 
--- | /O(n)/ take n, applied to a stream, returns the prefix of the
+-- | /O(n)/ @'take' n@, applied to a stream, returns the prefix of the
 -- stream of length @n@, or the stream itself if @n@ is greater than the
 -- length of the stream.
 take :: Integral a => a -> Stream Char -> Stream Char
 take n0 (Stream next0 s0 len) =
-    Stream next (n0 :*: s0) (smaller len (fromIntegral (max 0 n0)))
+    Stream next (n0 :*: s0) (smaller len (codePointsSize $ fromIntegral n0))
     where
       {-# INLINE next #-}
       next (n :*: s) | n <= 0    = Done
@@ -743,12 +748,12 @@ take n0 (Stream next0 s0 len) =
 data Drop a s = NS !s
               | JS !a !s
 
--- | /O(n)/ drop n, applied to a stream, returns the suffix of the
+-- | /O(n)/ @'drop' n@, applied to a stream, returns the suffix of the
 -- stream after the first @n@ characters, or the empty stream if @n@
 -- is greater than the length of the stream.
 drop :: Integral a => a -> Stream Char -> Stream Char
 drop n0 (Stream next0 s0 len) =
-    Stream next (JS n0 s0) (len - fromIntegral (max 0 n0))
+    Stream next (JS n0 s0) (len - codePointsSize (fromIntegral n0))
   where
     {-# INLINE next #-}
     next (JS n s)
@@ -763,10 +768,10 @@ drop n0 (Stream next0 s0 len) =
       Yield x s' -> Yield x (NS s')
 {-# INLINE [0] drop #-}
 
--- | takeWhile, applied to a predicate @p@ and a stream, returns the
--- longest prefix (possibly empty) of elements that satisfy p.
+-- | 'takeWhile', applied to a predicate @p@ and a stream, returns the
+-- longest prefix (possibly empty) of elements that satisfy @p@.
 takeWhile :: (Char -> Bool) -> Stream Char -> Stream Char
-takeWhile p (Stream next0 s0 len) = Stream next s0 len -- HINT maybe too high
+takeWhile p (Stream next0 s0 len) = Stream next s0 (len - unknownSize)
     where
       {-# INLINE next #-}
       next !s = case next0 s of
@@ -776,9 +781,9 @@ takeWhile p (Stream next0 s0 len) = Stream next s0 len -- HINT maybe too high
                              | otherwise -> Done
 {-# INLINE [0] takeWhile #-}
 
--- | dropWhile @p @xs returns the suffix remaining after takeWhile @p @xs.
+-- | @'dropWhile' p xs@ returns the suffix remaining after @'takeWhile' p xs@.
 dropWhile :: (Char -> Bool) -> Stream Char -> Stream Char
-dropWhile p (Stream next0 s0 len) = Stream next (L s0) len -- HINT maybe too high
+dropWhile p (Stream next0 s0 len) = Stream next (L s0) (len - unknownSize)
     where
     {-# INLINE next #-}
     next (L s)  = case next0 s of
@@ -812,7 +817,7 @@ isPrefixOf (Stream next1 s1 _) (Stream next2 s2 _) = loop (next1 s1) (next2 s2)
 -------------------------------------------------------------------------------
 -- ** Searching by equality
 
--- | /O(n)/ elem is the stream membership predicate.
+-- | /O(n)/ 'elem' is the stream membership predicate.
 elem :: Char -> Stream Char -> Bool
 elem w (Stream next s0 _len) = loop_elem s0
     where
@@ -857,7 +862,8 @@ indexI (Stream next s0 _len) n0
 -- returns a stream containing those characters that satisfy the
 -- predicate.
 filter :: (Char -> Bool) -> Stream Char -> Stream Char
-filter p (Stream next0 s0 len) = Stream next s0 len -- HINT maybe too high
+filter p (Stream next0 s0 len) =
+    Stream next s0 (len - unknownSize) -- HINT maybe too high
   where
     next !s = case next0 s of
                 Done                   -> Done

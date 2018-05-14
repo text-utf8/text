@@ -7,7 +7,6 @@
 --
 -- License     : BSD-style
 -- Maintainer  : bos@serpentine.com
--- Stability   : experimental
 -- Portability : portable
 --
 -- Packed, unboxed, heap-resident arrays.  Suitable for performance
@@ -36,6 +35,7 @@ module Data.Text.Array
 
     , empty
     , equal
+    , cmp
 #if defined(ASSERTS)
     , length
 #endif
@@ -44,8 +44,12 @@ module Data.Text.Array
     , toList
     , unsafeFreeze
     , unsafeIndex
+    , unsafeIndex32
+    , unsafeIndex64
     , new
     , unsafeWrite
+    , unsafeWrite32
+    , unsafeWrite64
     ) where
 
 #if defined(ASSERTS)
@@ -62,31 +66,31 @@ if (_k_) < 0 || (_k_) >= (_len_) then error ("Data.Text.Array." ++ (_func_) ++ "
 #if defined(ASSERTS)
 import Control.Exception (assert)
 #endif
-#if __GLASGOW_HASKELL__ >= 702
-import Control.Monad.ST.Unsafe (unsafeIOToST)
-#else
-import Control.Monad.ST (unsafeIOToST)
-#endif
 import Data.Bits ((.&.), xor)
-import Data.Text.Internal.Unsafe (inlinePerformIO)
-import Data.Text.Internal.Unsafe.Shift (shiftL, shiftR)
+import Data.Text.Internal.Unsafe.Shift (shiftR)
 import Foreign.Ptr (Ptr)
-#if __GLASGOW_HASKELL__ >= 703
+#if __GLASGOW_HASKELL__ >= 804
+import GHC.Exts (compareByteArrays#)
+#elif __GLASGOW_HASKELL__ >= 703
+import Data.Text.Internal.Unsafe (inlinePerformIO)
 import Foreign.C.Types (CInt(CInt), CSize(CSize))
 #else
+import Data.Text.Internal.Unsafe (inlinePerformIO)
 import Foreign.C.Types (CInt, CSize)
 #endif
-import GHC.Base (IO(..), RealWorld, ByteArray#, MutableByteArray#, Int(..), (-#),
-                 indexWord8Array#, newByteArray#, plusAddr#,
-                 unsafeFreezeByteArray#, writeWord8Array#,
+import GHC.Base (IO(..), ByteArray#, MutableByteArray#, Int(..), (-#),
+                 indexWord8Array#, indexWord32Array#, indexWord64Array#, newByteArray#, plusAddr#,
+                 unsafeFreezeByteArray#, writeWord8Array#, writeWord32Array#, writeWord64Array#,
                  copyByteArray#, copyMutableByteArray#, copyByteArrayToAddr#,
                  copyAddrToByteArray#)
 import GHC.Exts (Ptr(..))
 import GHC.ST (ST(..), runST)
-import GHC.Word (Word8(..))
+import GHC.Word (Word8(..), Word32(..), Word64(..))
 import Prelude hiding (length, read)
 
 -- | Immutable array type.
+--
+-- The 'Array' constructor is exposed since @text-1.1.1.3@
 data Array = Array {
       aBA :: ByteArray#
 #if defined(ASSERTS)
@@ -95,6 +99,8 @@ data Array = Array {
     }
 
 -- | Mutable array type, for use in the ST monad.
+--
+-- The 'MArray' constructor is exposed since @text-1.1.1.3@
 data MArray s = MArray {
       maBA :: MutableByteArray# s
 #if defined(ASSERTS)
@@ -160,6 +166,22 @@ unsafeIndex Array{..} i@(I# i#) =
     case indexWord8Array# aBA i# of r# -> (W8# r#)
 {-# INLINE unsafeIndex #-}
 
+-- | Unchecked read of an immutable array.  May return garbage or
+-- crash on an out-of-bounds access.
+unsafeIndex32 :: Array -> Int -> Word32
+unsafeIndex32 Array{..} i@(I# i#) =
+  CHECK_BOUNDS("unsafeIndex32",aLen `quot` 4,i)
+    case indexWord32Array# aBA i# of r# -> (W32# r#)
+{-# INLINE unsafeIndex32 #-}
+
+-- | Unchecked read of an immutable array.  May return garbage or
+-- crash on an out-of-bounds access.
+unsafeIndex64 :: Array -> Int -> Word64
+unsafeIndex64 Array{..} i@(I# i#) =
+  CHECK_BOUNDS("unsafeIndex64",aLen `quot` 8,i)
+    case indexWord64Array# aBA i# of r# -> (W64# r#)
+{-# INLINE unsafeIndex64 #-}
+
 -- | Unchecked write of a mutable array.  May return garbage or crash
 -- on an out-of-bounds access.
 unsafeWrite :: MArray s -> Int -> Word8 -> ST s ()
@@ -168,6 +190,24 @@ unsafeWrite MArray{..} i@(I# i#) (W8# e#) = ST $ \s1# ->
   case writeWord8Array# maBA i# e# s1# of
     s2# -> (# s2#, () #)
 {-# INLINE unsafeWrite #-}
+
+-- | Unchecked write of a mutable array.  May return garbage or crash
+-- on an out-of-bounds access.
+unsafeWrite32 :: MArray s -> Int -> Word32 -> ST s ()
+unsafeWrite32 MArray{..} i@(I# i#) (W32# e#) = ST $ \s1# ->
+  CHECK_BOUNDS("unsafeWrite32",maLen `quot` 4,i)
+  case writeWord32Array# maBA i# e# s1# of
+    s2# -> (# s2#, () #)
+{-# INLINE unsafeWrite32 #-}
+
+-- | Unchecked write of a mutable array.  May return garbage or crash
+-- on an out-of-bounds access.
+unsafeWrite64 :: MArray s -> Int -> Word64 -> ST s ()
+unsafeWrite64 MArray{..} i@(I# i#) (W64# e#) = ST $ \s1# ->
+  CHECK_BOUNDS("unsafeWrite64",maLen `quot` 8,i)
+  case writeWord64Array# maBA i# e# s1# of
+    s2# -> (# s2#, () #)
+{-# INLINE unsafeWrite64 #-}
 
 -- | Convert an immutable array to a list.
 toList :: Array -> Int -> Int -> [Word8]
@@ -235,14 +275,30 @@ equal :: Array                  -- ^ First
       -> Int                    -- ^ Offset into second
       -> Int                    -- ^ Count
       -> Bool
-equal arrA offA arrB offB count = inlinePerformIO $ do
-  i <- memcmp (aBA arrA) (fromIntegral offA)
-                     (aBA arrB) (fromIntegral offB) (fromIntegral count)
-  return $! i == 0
+equal arrA offA arrB offB count = cmp arrA offA arrB offB count == EQ
 {-# INLINE equal #-}
 
-foreign import ccall unsafe "_hs_text_memcmp" memcmp
+-- | Compare portions of two arrays for equality.  No bounds checking
+-- is performed.
+cmp :: Array                  -- ^ First
+    -> Int                    -- ^ Offset into first
+    -> Array                  -- ^ Second
+    -> Int                    -- ^ Offset into second
+    -> Int                    -- ^ Count
+    -> Ordering
+#if __GLASGOW_HASKELL__ >= 804
+cmp arrA (I# offA) arrB (I# offB) (I# count) =
+  compare (I# (compareByteArrays# (aBA arrA) offA (aBA arrB) offB count)) 0
+#else
+cmp arrA offA arrB offB count = inlinePerformIO $ do
+  i <- memcmp (aBA arrA) (fromIntegral offA)
+              (aBA arrB) (fromIntegral offB) (fromIntegral count)
+  return $ compare i 0
+{-# INLINE cmp #-}
+
+foreign import ccall unsafe "_hs_text_utf_8_memcmp" memcmp
     :: ByteArray# -> CSize -> ByteArray# -> CSize -> CSize -> IO CInt
+#endif
 
 -- | Copy some elements of an immutable array to a pointer
 copyToPtr :: Ptr Word8               -- ^ Destination
