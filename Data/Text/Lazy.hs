@@ -1141,9 +1141,9 @@ dropEnd n t0
                         T.dropEnd (fromIntegral m) t : ts
           where l = fromIntegral (T.length t)
 
--- | /O(n)/ 'dropWords' @n@ returns the suffix with @n@ 'Word16'
+-- | /O(n)/ 'dropWords' @n@ returns the suffix with @n@ 'Word8'
 -- values dropped, or the empty 'Text' if @n@ is greater than the
--- number of 'Word16' values present.
+-- number of 'Word8' values present.
 dropWords :: Int64 -> Text -> Text
 dropWords i t0
     | i <= 0    = t0
@@ -1274,7 +1274,7 @@ splitAt = loop
              where len = fromIntegral (T.length t)
 
 -- | /O(n)/ 'splitAtWord' @n t@ returns a strict pair whose first
--- element is a prefix of @t@ whose chunks contain @n@ 'Word16'
+-- element is a prefix of @t@ whose chunks contain @n@ 'Word8'
 -- values, and whose second is the remainder of the string.
 splitAtWord :: Int64 -> Text -> PairS Text Text
 splitAtWord _ Empty = empty :*: empty

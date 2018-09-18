@@ -62,10 +62,10 @@ import qualified Data.Text.Array as A
 newtype I8 = I8 Int
     deriving (Bounded, Enum, Eq, Integral, Num, Ord, Read, Real, Show)
 
--- | /O(n)/ Create a new 'Text' from a 'Ptr' 'Word16' by copying the
+-- | /O(n)/ Create a new 'Text' from a 'Ptr' 'Word8' by copying the
 -- contents of the array.
 fromPtr :: Ptr Word8            -- ^ source array
-        -> I8                   -- ^ length of source array (in 'Word16' units)
+        -> I8                   -- ^ length of source array (in 'Word8' units)
         -> IO Text
 fromPtr _   (I8 0)   = return empty
 fromPtr ptr (I8 len) =
@@ -80,15 +80,15 @@ fromPtr ptr (I8 len) =
 -- $lowlevel
 --
 -- Foreign functions that use UTF-16 internally may return indices in
--- units of 'Word16' instead of characters.  These functions may
+-- units of 'Word8' instead of characters.  These functions may
 -- safely be used with such indices, as they will adjust offsets if
 -- necessary to preserve the validity of a Unicode string.
 
--- | /O(1)/ Return the prefix of the 'Text' of @n@ 'Word16' units in
+-- | /O(1)/ Return the prefix of the 'Text' of @n@ 'Word8' units in
 -- length.
 --
 -- If @n@ would cause the 'Text' to end inside a surrogate pair, the
--- end of the prefix will be advanced by one additional 'Word16' unit
+-- end of the prefix will be advanced by one additional 'Word8' unit
 -- to maintain its validity.
 takeWord8 :: I8 -> Text -> Text
 takeWord8 (I8 n) t@(Text arr off len)
@@ -99,11 +99,11 @@ takeWord8 (I8 n) t@(Text arr off len)
   where
     x = A.unsafeIndex arr (off + n)
 
--- | /O(1)/ Return the suffix of the 'Text', with @n@ 'Word16' units
+-- | /O(1)/ Return the suffix of the 'Text', with @n@ 'Word8' units
 -- dropped from its beginning.
 --
 -- If @n@ would cause the 'Text' to begin inside a surrogate pair, the
--- beginning of the suffix will be advanced by one additional 'Word16'
+-- beginning of the suffix will be advanced by one additional 'Word8'
 -- unit to maintain its validity.
 dropWord8 :: I8 -> Text -> Text
 dropWord8 (I8 n) t@(Text arr off len)

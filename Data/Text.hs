@@ -1356,7 +1356,7 @@ groupBy p = loop
         where Iter c d = iter t 0
               n     = d + findAIndexOrEnd (not . p c) (Text arr (off+d) (len-d))
 
--- | Returns the /array/ index (in units of 'Word16') at which a
+-- | Returns the /array/ index (in units of 'Word8') at which a
 -- character may be found.  This is /not/ the same as the logical
 -- index returned by e.g. 'findIndex'.
 findAIndexOrEnd :: (Char -> Bool) -> Text -> Int

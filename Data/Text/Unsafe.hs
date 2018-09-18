@@ -102,12 +102,12 @@ lengthWord8 :: Text -> Int
 lengthWord8 (Text _arr _off len) = len
 {-# INLINE lengthWord8 #-}
 
--- | /O(1)/ Unchecked take of 'k' 'Word16's from the front of a 'Text'.
+-- | /O(1)/ Unchecked take of 'k' 'Word8's from the front of a 'Text'.
 takeWord8 :: Int -> Text -> Text
 takeWord8 k (Text arr off _len) = Text arr off k
 {-# INLINE takeWord8 #-}
 
--- | /O(1)/ Unchecked drop of 'k' 'Word16's from the front of a 'Text'.
+-- | /O(1)/ Unchecked drop of 'k' 'Word8's from the front of a 'Text'.
 dropWord8 :: Int -> Text -> Text
 dropWord8 k (Text arr off len) = Text arr (off+k) (len-k)
 {-# INLINE dropWord8 #-}

@@ -112,7 +112,7 @@ index (T.Text arr off len) xs !i
                     Chunk c cs -> index c cs (i-fromIntegral len)
     where j = fromIntegral i
 
--- | A variant of 'indices' that scans linearly for a single 'Word16'.
+-- | A variant of 'indices' that scans linearly for a single 'Word8'.
 indicesOne :: Word8 -> Int64 -> T.Text -> Text -> [Int64]
 indicesOne c = chunk
   where
@@ -125,7 +125,7 @@ indicesOne c = chunk
              | otherwise = go (h+1)
              where on = A.unsafeIndex oarr (ooff+h)
 
--- | The number of 'Word16' values in a 'Text'.
+-- | The number of 'Word8' values in a 'Text'.
 wordLength :: Text -> Int64
 wordLength = foldlChunks sumLength 0
     where sumLength i (T.Text _ _ l) = i + fromIntegral l
