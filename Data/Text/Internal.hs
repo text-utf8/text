@@ -58,9 +58,9 @@ import qualified Data.Text.Array as A
 
 -- | A space efficient, packed, unboxed Unicode text type.
 data Text = Text
-    {-# UNPACK #-} !A.Array          -- payload (Word16 elements)
-    {-# UNPACK #-} !Int              -- offset (units of Word16, not Char)
-    {-# UNPACK #-} !Int              -- length (units of Word16, not Char)
+    {-# UNPACK #-} !A.Array          -- payload (ByteArray)
+    {-# UNPACK #-} !Int              -- offset (in bytes)
+    {-# UNPACK #-} !Int              -- length (in bytes, not characters)
     deriving (Typeable)
 
 -- | Smart constructor.
