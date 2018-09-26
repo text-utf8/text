@@ -265,9 +265,15 @@ s_length          = length `eqP` S.length
 sf_length p       = (length . L.filter p) `eqP` (S.length . S.filter p)
 sl_length         = (fromIntegral . length) `eqP` SL.length
 t_length          = length `eqP` T.length
+t_fastLength      = length `eqP` T.fastLength
 tl_length         = L.genericLength `eqP` TL.length
 t_compareLength t = (compare (T.length t)) `eq` T.compareLength t
 tl_compareLength t= (compare (TL.length t)) `eq` TL.compareLength t
+
+
+t_fastTake t = L.find (\n -> T.take n t /= T.fastTake n t) [-1 .. T.length t + 1] =^= Nothing
+t_fastDrop t = L.find (\n -> T.drop n t /= T.fastDrop n t) [-1 .. T.length t + 1] =^= Nothing
+t_fastSplitAt t = L.find (\n -> T.splitAt n t /= T.fastSplitAt n t) [-1 .. T.length t + 1] =^= Nothing
 
 s_map f           = map f  `eqP` (unpackS . S.map f)
 s_map_s f         = map f  `eqP` (unpackS . S.unstream . S.map f)
@@ -1026,9 +1032,13 @@ tests =
       testProperty "sf_length" sf_length,
       testProperty "sl_length" sl_length,
       testProperty "t_length" t_length,
+      testProperty "t_fastLength" t_fastLength,
       testProperty "tl_length" tl_length,
       testProperty "t_compareLength" t_compareLength,
-      testProperty "tl_compareLength" tl_compareLength
+      testProperty "tl_compareLength" tl_compareLength,
+      testProperty "t_fastTake" t_fastTake,
+      testProperty "t_fastDrop" t_fastDrop,
+      testProperty "t_fastSplitAt" t_fastSplitAt
     ],
 
     testGroup "transformations" [

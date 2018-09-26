@@ -286,6 +286,7 @@ benchmark kind fp = do
         , bgroup "length"
             [ bgroup "cons"
                 [ benchT   $ nf (T.length . T.cons c) ta
+                , benchT   $ nf (T.fastLength . T.cons c) ta
                 , benchTL  $ nf (TL.length . TL.cons c) tla
                 , benchBS  $ nf (BS.length . BS.cons c) bsa
                 , benchBSL $ nf (BL.length . BL.cons c) bla
@@ -293,6 +294,7 @@ benchmark kind fp = do
                 ]
             , bgroup "decode"
                 [ benchT   $ nf (T.length . T.decodeUtf8) bsa
+                , benchT   $ nf (T.fastLength . T.decodeUtf8) bsa
                 , benchTL  $ nf (TL.length . TL.decodeUtf8) bla
                 , benchBS  $ nf (L.length . BS.unpack) bsa
                 , benchBSL $ nf (L.length . BL.unpack) bla
