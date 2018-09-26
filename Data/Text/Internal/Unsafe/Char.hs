@@ -30,7 +30,7 @@ module Data.Text.Internal.Unsafe.Char
 import Control.Exception (assert)
 #endif
 import Control.Monad.ST (ST)
-import Data.Bits ((.&.))
+import Data.Bits ((.&.), (.|.))
 import Data.Text.Internal.Unsafe.Shift (shiftR)
 import GHC.Exts (Char(..), Int(..), chr#, ord#, word2Int#)
 import GHC.Word (Word8(..), Word16(..), Word32(..))
@@ -69,8 +69,8 @@ unsafeWrite marr i c
 #if defined(ASSERTS)
         assert (i >= 0) . assert (i + 1 < A.length marr) $ return ()
 #endif
-        writeAt i       $ (n `shiftR` 6) + 0xC0
-        writeAt (i + 1) $ (n .&. 0x3F)   + 0x80
+        writeAt i       $ (n `shiftR` 6) .|. 0xC0
+        writeAt (i + 1) $ (n .&. 0x3F)   .|. 0x80
         return 2
 
     -- Three-byte character
@@ -78,9 +78,9 @@ unsafeWrite marr i c
 #if defined(ASSERTS)
         assert (i >= 0) . assert (i + 2 < A.length marr) $ return ()
 #endif
-        writeAt i       $ (n `shiftR` 12)           + 0xE0
-        writeAt (i + 1) $ ((n `shiftR` 6) .&. 0x3F) + 0x80
-        writeAt (i + 2) $ (n .&. 0x3F)              + 0x80
+        writeAt i       $ (n `shiftR` 12)           .|. 0xE0
+        writeAt (i + 1) $ ((n `shiftR` 6) .&. 0x3F) .|. 0x80
+        writeAt (i + 2) $ (n .&. 0x3F)              .|. 0x80
         return 3
 
     -- Four-byte character
@@ -88,10 +88,10 @@ unsafeWrite marr i c
 #if defined(ASSERTS)
         assert (i >= 0) . assert (i + 3 < A.length marr) $ return ()
 #endif
-        writeAt i       $ (n `shiftR` 18)            + 0xF0
-        writeAt (i + 1) $ ((n `shiftR` 12) .&. 0x3F) + 0x80
-        writeAt (i + 2) $ ((n `shiftR` 6)  .&. 0x3F) + 0x80
-        writeAt (i + 3) $ (n .&. 0x3F)               + 0x80
+        writeAt i       $ (n `shiftR` 18)            .|. 0xF0
+        writeAt (i + 1) $ ((n `shiftR` 12) .&. 0x3F) .|. 0x80
+        writeAt (i + 2) $ ((n `shiftR` 6)  .&. 0x3F) .|. 0x80
+        writeAt (i + 3) $ (n .&. 0x3F)               .|. 0x80
         return 4
   where 
     n = ord c

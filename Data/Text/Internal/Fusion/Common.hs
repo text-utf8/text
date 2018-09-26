@@ -106,14 +106,15 @@ import Prelude (Bool(..), Char, Eq(..), Int, Integral, Maybe(..),
                 (&&), fromIntegral, otherwise)
 import qualified Data.List as L
 import qualified Prelude as P
-import Data.Bits (shiftL)
+import Data.Bits ((.&.))
 import Data.Char (isLetter, isSpace)
 import Data.Int (Int64)
 import Data.Text.Internal.Fusion.Types
 import Data.Text.Internal.Fusion.CaseMapping (foldMapping, lowerMapping, titleMapping,
                                      upperMapping)
 import Data.Text.Internal.Fusion.Size
-import GHC.Prim (Addr#, chr#, indexCharOffAddr#, ord#)
+import Data.Text.Internal.Unsafe.Shift (shiftL)
+import GHC.Prim (Addr#, and#, chr#, indexCharOffAddr#, ord#)
 import GHC.Types (Char(..), Int(..))
 
 singleton :: Char -> Stream Char
@@ -149,19 +150,19 @@ streamCString# addr = Stream step 0 unknownSize
     step !i
         | b == 0    = Done
         | b <= 0x7f = Yield (C# b#) (i+1)
-        | b <= 0xdf = let !c = chr $ ((b-0xc0) `shiftL` 6) + next 1
+        | b <= 0xdf = let !c = chr $ ((b .&. 0x3F) `shiftL` 6) + next 1
                       in Yield c (i+2)
-        | b <= 0xef = let !c = chr $ ((b-0xe0) `shiftL` 12) +
+        | b <= 0xef = let !c = chr $ ((b .&. 0x1F) `shiftL` 12) +
                                       (next 1  `shiftL` 6) +
                                        next 2
                       in Yield c (i+3)
-        | otherwise = let !c = chr $ ((b-0xf0) `shiftL` 18) +
+        | otherwise = let !c = chr $ ((b .&. 0x0F) `shiftL` 18) +
                                       (next 1  `shiftL` 12) +
                                       (next 2  `shiftL` 6) +
                                        next 3
                       in Yield c (i+4)
       where b      = I# (ord# b#)
-            next n = I# (ord# (at# (i+n))) - 0x80
+            next n = I# (ord# (at# (i+n))) .&. 0x7F
             !b#    = at# i
     at# (I# i#) = indexCharOffAddr# addr i#
     chr (I# i#) = C# (chr# i#)
