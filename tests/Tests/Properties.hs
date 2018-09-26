@@ -133,12 +133,12 @@ t_utf8_err bad de = do
   forAll gen $ \bs -> MkProperty $ do
     onErr <- genDecodeErr de
     unProperty . monadicIO $ do
-    l <- run $ let len = T.length (E.decodeUtf8With onErr bs)
-               in (len `seq` return (Right len)) `Exception.catch`
-                  (\(e::UnicodeException) -> return (Left e))
-    assert $ case l of
-      Left err -> length (show err) >= 0
-      Right _  -> de /= Strict
+      l <- run $ let len = T.length (E.decodeUtf8With onErr bs)
+                 in (len `seq` return (Right len)) `Exception.catch`
+                    (\(e::UnicodeException) -> return (Left e))
+      assert $ case l of
+        Left err -> length (show err) >= 0
+        Right _  -> de /= Strict
 
 t_utf8_err' :: B.ByteString -> Property
 t_utf8_err' bs = monadicIO . assert $ case E.decodeUtf8' bs of
