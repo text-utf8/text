@@ -95,10 +95,10 @@ reverseStream (Text arr off len) = Stream next (off+len-1) (betweenSize (len `sh
 unstream :: Stream Char -> Text
 unstream (Stream next0 s0 len) = runText $ \done -> do
   -- Before encoding each char we perform a buffer realloc check assuming
-  -- worst case encoding size of two 16-bit units for the char. Just add an
+  -- worst case encoding size of 4 byte units for the char. Just add an
   -- extra space to the buffer so that we do not end up reallocating even when
   -- all the chars are encoded as single unit.
-  let mlen = upperBound 4 len + 1
+  let mlen = upperBound 4 len + 4
   arr0 <- A.new mlen
   let outer !arr !maxi = encode
        where
@@ -108,8 +108,7 @@ unstream (Stream next0 s0 len) = runText $ \done -> do
                 Done        -> done arr di
                 Skip si'    -> encode si' di
                 Yield c si'
-                    -- simply check for the worst case
-                    | maxi < di + U8.charTailBytes c -> realloc si di
+                    | di >= maxi -> realloc si di
                     | otherwise -> do
                             n <- unsafeWrite arr di c
                             encode si' (di + n)
@@ -117,12 +116,13 @@ unstream (Stream next0 s0 len) = runText $ \done -> do
         -- keep uncommon case separate from the common case code
         {-# NOINLINE realloc #-}
         realloc !si !di = do
-            let newlen = (maxi + 1) * 2
+            let newlen = (maxi + 3) * 2
             arr' <- A.new newlen
             A.copyM arr' 0 arr 0 di
-            outer arr' (newlen - 1) si di
+            outer arr' (newlen - 3) si di
 
-  outer arr0 (mlen - 1) s0 0
+  -- in the worst case (mlen-3) is the first unsafe position
+  outer arr0 (mlen - 3) s0 0
 {-# INLINE [0] unstream #-}
 {-# RULES "STREAM stream/unstream fusion" forall s. stream (unstream s) = s #-}
 
